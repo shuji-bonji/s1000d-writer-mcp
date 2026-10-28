@@ -162,6 +162,22 @@ describe('server', () => {
     );
     expect(schema.required).toEqual(['draft', 'allocation']);
   });
+  it('オブジェクトの引数は、$ref だけでなく type: "object" をその場に持つ（$ref を解決しないクライアント向け）', async () => {
+    const offenders: string[] = [];
+    for (const t of (await client.listTools()).tools) {
+      const props =
+        (t.inputSchema as { properties?: Record<string, Record<string, unknown>> }).properties ??
+        {};
+      for (const [name, p] of Object.entries(props)) {
+        if ('$ref' in p && !('type' in p)) offenders.push(`${t.name}.${name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+    const t = (await client.listTools()).tools.find((x) => x.name === 'build_data_module')!;
+    const props = (t.inputSchema as { properties: Record<string, { type?: string }> }).properties;
+    expect(props.draft.type).toBe('object');
+    expect(props.allocation.type).toBe('object');
+  });
   it('未知の引数は拒否される', async () => {
     const r = await call('extract_segments', { path: DESCRIPT_DM, bogus: 1 });
     expect(r.isError).toBe(true);

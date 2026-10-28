@@ -17,10 +17,19 @@ const draftSchema = require('@shuji-bonji/s1000d-core/schema/draft.schema.json')
 /** core の draft.schema.json の $defs（DraftDataModule・DraftNode・Allocation・DmCode・IssueInfo・Language …） */
 const DEFS = draftSchema.$defs as unknown as NonNullable<JsonSchemaType['$defs']>;
 
-const ref = (name: string, description?: string) => ({
-  $ref: `#/$defs/${name}`,
-  ...(description ? { description } : {}),
-});
+/**
+ * 引数の位置に $defs の定義を展開して置く（`type: "object"` などをその場に持たせる）。
+ *
+ * `$ref` だけを置くと、`$ref` を解決しないクライアントが引数の型を決められず、
+ * オブジェクトを文字列として渡すことがある（0.1.0 の Claude Desktop の plugin 版で
+ * `data/draft must be object` になった）。中の入れ子の `$ref`（DraftNode の再帰など）は
+ * 同じ inputSchema の `$defs` を指したまま残す。
+ */
+const ref = (name: string, description?: string) => {
+  const def = (DEFS as Record<string, Record<string, unknown>>)[name];
+  if (!def) throw new Error(`draft.schema.json has no $defs/${name}`);
+  return { ...def, ...(description ? { description } : {}) };
+};
 
 const csdbDirsParam = {
   type: 'array',
