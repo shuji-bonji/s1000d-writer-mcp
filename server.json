@@ -8,12 +8,12 @@
     "url": "https://github.com/shuji-bonji/s1000d-writer-mcp",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@shuji-bonji/s1000d-writer-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": {
         "type": "stdio"
       }

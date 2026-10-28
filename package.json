@@ -1,7 +1,7 @@
 {
   "name": "@shuji-bonji/s1000d-writer-mcp",
   "mcpName": "io.github.shuji-bonji/s1000d-writer-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that builds, repairs and prepares for translation S1000D® data modules without letting the LLM write XML: structured drafts in, XML out, always verified (XSD, BREX, references). Not affiliated with ASD.",
   "keywords": [
     "mcp",
