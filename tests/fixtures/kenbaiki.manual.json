@@ -1,0 +1,254 @@
+{
+  "id": "6e3c2b8a-5f0d-4c6e-9b2a-kenbaiki-example",
+  "title": "指定席券売機 操作マニュアル（例）",
+  "version": {
+    "number": "1.0",
+    "date": "2026-10-25",
+    "note": "experiential-manual-model の例。段階 3 で S1000D に変換して verify を通す入力"
+  },
+  "language": "ja",
+  "description": "券売機の画面を体験しながら操作を学ぶマニュアルの例です。画面の素材は架空のものです。",
+  "scopes": [
+    { "id": "scope-mv50", "property": "model", "values": ["MV-50"], "displayText": "MV-50" },
+    { "id": "scope-mv60", "property": "model", "values": ["MV-60"], "displayText": "MV-60" },
+    { "id": "scope-outdoor", "property": "site", "values": ["outdoor"], "displayText": "屋外設置" }
+  ],
+  "assets": [
+    {
+      "id": "img-top",
+      "kind": "image",
+      "source": { "path": "img/top.png", "mediaType": "image/png" },
+      "alt": "トップ画面"
+    },
+    {
+      "id": "img-station",
+      "kind": "image",
+      "source": { "path": "img/station.png", "mediaType": "image/png" },
+      "alt": "到着駅の選択画面"
+    },
+    {
+      "id": "img-payment",
+      "kind": "image",
+      "source": { "path": "img/payment.png", "mediaType": "image/png" },
+      "alt": "支払い画面"
+    },
+    {
+      "id": "img-shortage",
+      "kind": "image",
+      "source": { "path": "img/shortage.png", "mediaType": "image/png" },
+      "alt": "残高不足の画面"
+    },
+    {
+      "id": "img-door",
+      "kind": "image",
+      "source": { "path": "img/door.png", "mediaType": "image/png" },
+      "alt": "前面扉の取っ手"
+    },
+    {
+      "id": "model-door",
+      "kind": "model3d",
+      "source": { "path": "cad/door.jt", "mediaType": "model/vnd.siemens.jt" },
+      "display": { "path": "cad/door.glb", "mediaType": "model/gltf-binary" },
+      "alt": "前面扉の 3D モデル"
+    }
+  ],
+  "topics": [
+    {
+      "id": "topic-overview",
+      "kind": "description",
+      "title": "券売機の概要",
+      "summary": "何ができる機械か、画面の見方。",
+      "blocks": [
+        {
+          "kind": "section",
+          "id": "sec-what",
+          "title": "できること",
+          "children": [
+            {
+              "kind": "para",
+              "text": "乗換案内から列車を選んできっぷを買う、きっぷを払い戻す、定期券を更新する、の 3 つができます。"
+            },
+            {
+              "kind": "list",
+              "ordered": false,
+              "items": ["乗換案内からの購入", "払い戻し", "定期券の更新"]
+            }
+          ]
+        },
+        {
+          "kind": "section",
+          "id": "sec-screen",
+          "title": "画面の見方",
+          "children": [
+            { "kind": "figure", "title": "トップ画面", "assetRef": "img-top" },
+            {
+              "kind": "table",
+              "rows": [
+                ["場所", "内容"],
+                ["上", "現在時刻と出発駅"],
+                ["中央", "操作のボタン"],
+                ["下", "取り消し・前の画面"]
+              ]
+            },
+            {
+              "kind": "admonition",
+              "level": "note",
+              "text": "画面はしばらく触れないとトップ画面に戻ります。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "topic-buy",
+      "kind": "screenFlow",
+      "title": "乗換案内からきっぷを買う",
+      "summary": "出発駅と到着駅を選び、列車を選んで支払うまでを画面で体験します。",
+      "startScreenRef": "scr-top",
+      "screens": [
+        {
+          "id": "scr-top",
+          "caption": "STEP1",
+          "assetRef": "img-top",
+          "description": "「乗換案内から購入」を押します。",
+          "hotspots": [
+            {
+              "id": "hs-top-transfer",
+              "label": "乗換案内から購入",
+              "shape": "rect",
+              "coords": [653, 177, 1203, 364],
+              "action": "press",
+              "transition": { "to": "scr-station" }
+            }
+          ]
+        },
+        {
+          "id": "scr-station",
+          "caption": "STEP2",
+          "assetRef": "img-station",
+          "description": "到着駅を選びます。",
+          "admonitions": [
+            {
+              "level": "note",
+              "text": "出発駅は現在地があらかじめ入っています。変える場合は「変更する」を押します。"
+            }
+          ],
+          "hotspots": [
+            {
+              "id": "hs-station-next",
+              "label": "次へ",
+              "shape": "rect",
+              "coords": [1068, 323, 1196, 391],
+              "action": "press",
+              "transition": { "to": "scr-payment" }
+            },
+            {
+              "id": "hs-station-cancel",
+              "label": "取り消し",
+              "shape": "circle",
+              "coords": [67, 957, 58],
+              "action": "press",
+              "transition": { "to": "scr-top" }
+            }
+          ]
+        },
+        {
+          "id": "scr-payment",
+          "caption": "STEP3",
+          "assetRef": "img-payment",
+          "description": "IC カードをかざして支払います。",
+          "hotspots": [
+            {
+              "id": "hs-payment-ic",
+              "label": "IC カード",
+              "shape": "poly",
+              "coords": [100, 800, 300, 800, 300, 950, 100, 950],
+              "action": "input",
+              "transition": {
+                "to": "scr-top",
+                "condition": "残高が足りているとき",
+                "label": "発券して終了"
+              }
+            },
+            {
+              "id": "hs-payment-ic-short",
+              "label": "IC カード（残高不足）",
+              "shape": "poly",
+              "coords": [100, 800, 300, 800, 300, 950, 100, 950],
+              "action": "input",
+              "transition": { "to": "scr-shortage", "condition": "残高が不足しているとき" }
+            }
+          ]
+        },
+        {
+          "id": "scr-shortage",
+          "caption": "STEP3-2",
+          "assetRef": "img-shortage",
+          "description": "残高が不足しています。チャージするか、別の支払い方法を選びます。",
+          "hotspots": [
+            {
+              "id": "hs-shortage-back",
+              "label": "戻る",
+              "shape": "rect",
+              "coords": [158, 941, 325, 1010],
+              "action": "press",
+              "transition": { "to": "scr-payment" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "topic-open-door",
+      "kind": "procedure",
+      "title": "前面扉を開ける（係員）",
+      "summary": "保守のために前面扉を開ける手順。",
+      "scopeRefs": ["scope-mv50", "scope-mv60"],
+      "steps": [
+        {
+          "id": "stp-open-1",
+          "text": "保守鍵で前面扉の鍵を開ける。",
+          "admonitions": [{ "level": "caution", "text": "扉は重いので、両手で支える。" }],
+          "assetRefs": ["img-door", "model-door"],
+          "children": [
+            {
+              "id": "stp-open-1-1",
+              "text": "鍵を右に回す。",
+              "expected": "カチッと音がして鍵が外れる。"
+            },
+            { "id": "stp-open-1-2", "text": "取っ手を引く。", "scopeRefs": ["scope-mv60"] },
+            {
+              "id": "stp-open-1-3",
+              "text": "雨よけのカバーを先に外す。",
+              "scopeRefs": ["scope-outdoor"]
+            }
+          ]
+        },
+        { "id": "stp-open-2", "text": "保守モードに入る。", "next": [{ "to": "stp-open-3" }] },
+        { "id": "stp-open-3", "text": "作業が終わったら扉を閉めて鍵をかける。" }
+      ]
+    },
+    {
+      "id": "topic-no-ticket",
+      "kind": "troubleshooting",
+      "title": "きっぷが出てこない",
+      "steps": [
+        {
+          "id": "ts-1",
+          "text": "用紙の残量を見る。",
+          "question": "用紙はありますか。",
+          "answers": [
+            { "text": "ある", "next": { "to": "ts-2" } },
+            { "text": "ない", "next": { "to": "ts-3" } }
+          ]
+        },
+        { "id": "ts-2", "text": "印字部を清掃する。" },
+        { "id": "ts-3", "text": "用紙を補充する。" }
+      ]
+    }
+  ],
+  "glossary": [
+    { "term": "保守モード", "definition": "係員だけが使える画面。売上の集計や用紙の交換を行う。" },
+    { "term": "IC カード", "definition": "交通系の非接触 IC カード。" }
+  ]
+}

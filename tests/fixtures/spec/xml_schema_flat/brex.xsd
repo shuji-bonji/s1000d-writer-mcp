@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 自作のテスト用 XSD（S1000D のものではない）。版の判定に使う brex.xsd の代わり -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:annotation id="version"><xs:documentation>Issue number: 7</xs:documentation></xs:annotation><xs:element name="dmodule"/></xs:schema>

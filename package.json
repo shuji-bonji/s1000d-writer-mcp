@@ -1,0 +1,79 @@
+{
+  "name": "@shuji-bonji/s1000d-writer-mcp",
+  "mcpName": "io.github.shuji-bonji/s1000d-writer-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that builds, repairs and prepares for translation S1000D® data modules without letting the LLM write XML: structured drafts in, XML out, always verified (XSD, BREX, references). Not affiliated with ASD.",
+  "keywords": [
+    "mcp",
+    "s1000d",
+    "ietm",
+    "ietp",
+    "technical-publications",
+    "data-module",
+    "publication-module",
+    "xml",
+    "writer"
+  ],
+  "author": "shuji-bonji",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shuji-bonji/s1000d-writer-mcp.git"
+  },
+  "bugs": "https://github.com/shuji-bonji/s1000d-writer-mcp/issues",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./convert": {
+      "types": "./dist/convert/index.d.ts",
+      "import": "./dist/convert/index.js"
+    }
+  },
+  "bin": {
+    "s1000d-writer-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:spec": "S1000D_SPEC_TESTS=1 vitest --run",
+    "lint": "eslint src",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
+    "version": "node scripts/sync-plugin-version.mjs && git add .claude-plugin/plugin.json server.json",
+    "prepublishOnly": "node scripts/sync-plugin-version.mjs --check && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@shuji-bonji/experiential-manual-model": "^0.1.0",
+    "@shuji-bonji/s1000d-core": "^0.8.0",
+    "libxml2-wasm": "^0.7.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.53.0",
+    "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

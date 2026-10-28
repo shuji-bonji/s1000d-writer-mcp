@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 自作のテスト用 BREX（券売機プロジェクト）。上位に kenbaiki-base-brex.xml（組織の BREX）を参照する。 -->
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_7/xml_schema_flat/brex.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="00" subSystemCode="0"
+          subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022"
+          infoCodeVariant="A" itemLocationCode="D"/>
+        <language languageIsoCode="ja" countryIsoCode="JP"/>
+        <issueInfo issueNumber="001" inWork="00"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate year="2026" month="10" day="23"/>
+        <dmTitle>
+          <techName>指定席券売機</techName>
+          <infoName>ビジネスルール</infoName>
+        </dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus issueType="new">
+      <security securityClassification="01"/>
+      <responsiblePartnerCompany enterpriseCode="K0001"><enterpriseName>Kenbaiki Works</enterpriseName></responsiblePartnerCompany>
+      <originator enterpriseCode="K0001"><enterpriseName>Kenbaiki Works</enterpriseName></originator>
+      <applic><displayText><simplePara>All</simplePara></displayText></applic>
+      <brexDmRef>
+        <dmRef>
+          <dmRefIdent>
+            <dmCode modelIdentCode="KBWORKS" systemDiffCode="A" systemCode="00" subSystemCode="0"
+              subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022"
+              infoCodeVariant="A" itemLocationCode="D"/>
+          </dmRefIdent>
+        </dmRef>
+      </brexDmRef>
+      <qualityAssurance><unverified/></qualityAssurance>
+    </dmStatus>
+  </identAndStatusSection>
+  <content>
+    <brex defaultBrSeverityLevel="brsl02">
+      <commonInfo><para>券売機プロジェクトの規則。組織の規則（KBWORKS）に基づく。</para></commonInfo>
+      <snsRules>
+        <snsDescr>
+          <snsSystem>
+            <snsCode>10</snsCode>
+            <snsTitle>発券部</snsTitle>
+            <snsSubSystem>
+              <snsCode>2</snsCode>
+              <snsTitle>画面</snsTitle>
+              <snsSubSubSystem>
+                <snsCode>0</snsCode>
+                <snsTitle>全般</snsTitle>
+              </snsSubSubSystem>
+            </snsSubSystem>
+          </snsSystem>
+        </snsDescr>
+      </snsRules>
+      <contextRules>
+        <structureObjectRuleGroup>
+          <structureObjectRule>
+            <brDecisionRef brDecisionIdentNumber="KB-00001"/>
+            <objectPath allowedObjectFlag="1">//security</objectPath>
+            <objectUse>機密区分は必ず書く</objectUse>
+          </structureObjectRule>
+        </structureObjectRuleGroup>
+      </contextRules>
+      </brex>
+  </content>
+</dmodule>

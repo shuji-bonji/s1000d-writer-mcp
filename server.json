@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.shuji-bonji/s1000d-writer-mcp",
+  "title": "S1000D Writer (S1000D Stack)",
+  "description": "Build S1000D data modules from a structured draft, verify them, and apply only unambiguous fixes. Writes nothing unless asked.",
+  "websiteUrl": "https://shuji-bonji.github.io/s1000d-stack/",
+  "repository": {
+    "url": "https://github.com/shuji-bonji/s1000d-writer-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@shuji-bonji/s1000d-writer-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

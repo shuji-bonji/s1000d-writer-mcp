@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dmodule [
+  <!ENTITY ICN-KENBAIKI-A-000000-0-K0001-00001-A-01-1 SYSTEM "ICN-KENBAIKI-A-000000-0-K0001-00001-A-01-1.PNG" NDATA png>
+  <!NOTATION png PUBLIC "-//W3C//NOTATION Portable Network Graphics//EN">
+]>
+<!-- 自作のテスト用データモジュール（指定席券売機の説明）。S1000D の公式サンプルの複製ではない。 -->
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_7/xml_schema_flat/descript.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="10" subSystemCode="2"
+          subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="040"
+          infoCodeVariant="A" itemLocationCode="D"/>
+        <language languageIsoCode="ja" countryIsoCode="JP"/>
+        <issueInfo issueNumber="002" inWork="01"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate year="2026" month="10" day="23"/>
+        <dmTitle>
+          <techName>指定席券売機</techName>
+          <infoName>説明</infoName>
+        </dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus issueType="changed">
+      <security securityClassification="01"/>
+      <responsiblePartnerCompany enterpriseCode="K0001">
+        <enterpriseName>Kenbaiki Works</enterpriseName>
+      </responsiblePartnerCompany>
+      <originator enterpriseCode="K0001">
+        <enterpriseName>Kenbaiki Works</enterpriseName>
+      </originator>
+      <applic>
+        <displayText>
+          <simplePara>タッチパネル式、2 号機以降</simplePara>
+        </displayText>
+      </applic>
+      <brexDmRef>
+        <dmRef>
+          <dmRefIdent>
+            <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="00" subSystemCode="0"
+              subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022"
+              infoCodeVariant="A" itemLocationCode="D"/>
+            <issueInfo issueNumber="001" inWork="00"/>
+          </dmRefIdent>
+        </dmRef>
+      </brexDmRef>
+      <qualityAssurance>
+        <firstVerification verificationType="tabtop"/>
+      </qualityAssurance>
+    </dmStatus>
+  </identAndStatusSection>
+  <content>
+    <description>
+      <levelledPara>
+        <title>画面の構成</title>
+        <para>初期画面には「きっぷを買う」「予約を受け取る」の 2 つのボタンがある。</para>
+        <figure>
+          <title>初期画面</title>
+          <graphic infoEntityIdent="ICN-KENBAIKI-A-000000-0-K0001-00001-A-01-1"/>
+        </figure>
+      </levelledPara>
+    </description>
+  </content>
+</dmodule>

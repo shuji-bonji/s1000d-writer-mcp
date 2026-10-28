@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 自作のテスト用 BREX（組織 KBWORKS）。自分自身を参照し、連鎖の終端になる。 -->
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_7/xml_schema_flat/brex.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode modelIdentCode="KBWORKS" systemDiffCode="A" systemCode="00" subSystemCode="0"
+          subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022"
+          infoCodeVariant="A" itemLocationCode="D"/>
+        <language languageIsoCode="ja" countryIsoCode="JP"/>
+        <issueInfo issueNumber="003" inWork="00"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate year="2026" month="10" day="01"/>
+        <dmTitle><techName>Kenbaiki Works</techName><infoName>ビジネスルール</infoName></dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus issueType="changed">
+      <security securityClassification="01"/>
+      <responsiblePartnerCompany enterpriseCode="K0001"><enterpriseName>Kenbaiki Works</enterpriseName></responsiblePartnerCompany>
+      <originator enterpriseCode="K0001"><enterpriseName>Kenbaiki Works</enterpriseName></originator>
+      <applic><displayText><simplePara>All</simplePara></displayText></applic>
+      <brexDmRef>
+        <dmRef>
+          <dmRefIdent>
+            <dmCode modelIdentCode="KBWORKS" systemDiffCode="A" systemCode="00" subSystemCode="0"
+              subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022"
+              infoCodeVariant="A" itemLocationCode="D"/>
+          </dmRefIdent>
+        </dmRef>
+      </brexDmRef>
+      <qualityAssurance><firstVerification verificationType="tabtop"/></qualityAssurance>
+    </dmStatus>
+  </identAndStatusSection>
+  <content>
+    <brex>
+      <contextRules>
+        <structureObjectRuleGroup>
+          <structureObjectRule>
+            <brDecisionRef brDecisionIdentNumber="KBW-00001"/>
+            <objectPath allowedObjectFlag="0">//dmodule[not(identAndStatusSection/dmStatus/brexDmRef)]</objectPath>
+            <objectUse>すべてのデータモジュールは BREX を参照する</objectUse>
+          </structureObjectRule>
+          <structureObjectRule>
+            <brDecisionRef brDecisionIdentNumber="KBW-00002"/>
+            <objectPath allowedObjectFlag="2">//language/@countryIsoCode</objectPath>
+            <objectUse>国コードは JP</objectUse>
+            <objectValue valueForm="single" valueAllowed="JP">日本</objectValue>
+          </structureObjectRule>
+        </structureObjectRuleGroup>
+      </contextRules>
+    </brex>
+  </content>
+</dmodule>

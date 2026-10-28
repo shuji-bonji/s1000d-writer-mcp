@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 自作のテスト用の手順データモジュール（券売機の前面扉を開ける）。適用性の判定とステップの番号を確かめる。 -->
+<!DOCTYPE dmodule [
+  <!ENTITY ICN-KENBAIKI-A-102000-0-K0001-00002-A-01-1 SYSTEM "ICN-KENBAIKI-A-102000-0-K0001-00002-A-01-1.PNG" NDATA png>
+]>
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_7/xml_schema_flat/proced.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="10" subSystemCode="2"
+          subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="520"
+          infoCodeVariant="A" itemLocationCode="A"/>
+        <language languageIsoCode="ja" countryIsoCode="JP"/>
+        <issueInfo issueNumber="001" inWork="00"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate year="2026" month="10" day="25"/>
+        <dmTitle><techName>前面扉</techName><infoName>開け方</infoName></dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus issueType="new">
+      <security securityClassification="01"/>
+      <responsiblePartnerCompany enterpriseCode="K0001"/>
+      <originator enterpriseCode="K0001"/>
+      <applicCrossRefTableRef><dmRef><dmRefIdent>
+        <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="00" subSystemCode="0"
+          subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="00W"
+          infoCodeVariant="A" itemLocationCode="D"/>
+      </dmRefIdent></dmRef></applicCrossRefTableRef>
+      <applic>
+        <displayText><simplePara>MV-50 と MV-60</simplePara></displayText>
+        <assert applicPropertyIdent="model" applicPropertyType="prodattr" applicPropertyValues="MV-50|MV-60"/>
+      </applic>
+      <brexDmRef><dmRef><dmRefIdent>
+        <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="00" subSystemCode="0"
+          subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022"
+          infoCodeVariant="A" itemLocationCode="D"/>
+      </dmRefIdent></dmRef></brexDmRef>
+      <qualityAssurance><unverified/></qualityAssurance>
+    </dmStatus>
+  </identAndStatusSection>
+  <content>
+    <referencedApplicGroup>
+      <applic id="app-mv60"><displayText><simplePara>MV-60 だけ</simplePara></displayText>
+        <assert applicPropertyIdent="model" applicPropertyType="prodattr" applicPropertyValues="MV-60"/></applic>
+      <applic id="app-outdoor"><displayText><simplePara>屋外設置</simplePara></displayText>
+        <assert applicPropertyIdent="site" applicPropertyType="prodattr" applicPropertyValues="outdoor"/></applic>
+    </referencedApplicGroup>
+    <procedure>
+      <preliminaryRqmts>
+        <reqCondGroup><reqCondNoRef><reqCond>電源が入っていること</reqCond></reqCondNoRef></reqCondGroup>
+        <reqPersons><person man="A"><personCategory personCategoryCode="Operator"/><trade>係員</trade><estimatedTime unitOfMeasure="min">5</estimatedTime></person></reqPersons>
+        <reqSupportEquips><supportEquipDescrGroup><supportEquipDescr id="seq-0001"><name>保守鍵</name><identNumber><manufacturerCode>K0001</manufacturerCode><partAndSerialNumber><partNumber>KEY-01</partNumber></partAndSerialNumber></identNumber><reqQuantity unitOfMeasure="EA">1</reqQuantity></supportEquipDescr></supportEquipDescrGroup></reqSupportEquips>
+        <reqSupplies><noSupplies/></reqSupplies>
+        <reqSpares><noSpares/></reqSpares>
+        <reqSafety><safetyRqmts><warning><warningAndCautionPara>扉を開ける前に電源を切る</warningAndCautionPara></warning></safetyRqmts></reqSafety>
+      </preliminaryRqmts>
+      <mainProcedure>
+        <proceduralStep id="stp-0001" securityClassification="02">
+          <para>保守鍵（<internalRef internalRefId="seq-0001" internalRefTargetType="irtt05"/>）で前面扉を開ける。詳細は <dmRef><dmRefIdent>
+            <dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="10" subSystemCode="2"
+              subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="040"
+              infoCodeVariant="A" itemLocationCode="D"/>
+          </dmRefIdent></dmRef> を見る。</para>
+          <caution><warningAndCautionPara>扉は重い</warningAndCautionPara></caution>
+          <proceduralStep><para>鍵を右に回す。</para></proceduralStep>
+          <proceduralStep applicRefId="app-mv60"><para>MV-60 では取っ手を引く。</para>
+            <figure id="fig-0001"><title>扉の取っ手</title><graphic infoEntityIdent="ICN-KENBAIKI-A-102000-0-K0001-00002-A-01-1"><hotspot applicationStructureIdent="door-handle" id="hs-0001"/></graphic></figure>
+          </proceduralStep>
+        </proceduralStep>
+        <proceduralStep applicRefId="app-outdoor"><para>雨よけのカバーを外す。</para></proceduralStep>
+        <proceduralStep><para>保守モードに入る。</para></proceduralStep>
+      </mainProcedure>
+      <closeRqmts><reqCondGroup><noConds/></reqCondGroup></closeRqmts>
+    </procedure>
+  </content>
+</dmodule>

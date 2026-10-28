@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# S1000D の仕様書・スキーマ・公式サンプル（利用条件により再配布不可）
+/specs/
+*.zip
+S1000D*/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Test
+coverage/
+*.timestamp-*.mjs
+vitest.config.ts.timestamp-*
+
+# Environment
+.env
+.env.local
