@@ -200,6 +200,19 @@ describe('build_data_module', () => {
     expect(r.data._notes.join('\n')).toContain('Nothing was written');
   });
 
+  it('既定 BREX が見つからず brexDmRef を省いたときは、BREX を照合していないことを注記し、brex.state は not-run', async () => {
+    useSpec(undefined);
+    const a = allocation();
+    delete (a as Record<string, unknown>).brexDmRef;
+    const r = await call('build_data_module', { draft: draft(), allocation: a });
+    expect(r.isError).toBe(false);
+    expect(r.data.xml).not.toContain('<brexDmRef>');
+    expect(r.data.verification.brex).toMatchObject({ layers: 0, state: 'not-run' });
+    const notes = r.data._notes.join('\n');
+    expect(notes).toContain('brexDmRef element was omitted');
+    expect(notes).toContain('BREX was not checked');
+  });
+
   it('自作の XSD と BREX（lax）に通ると valid / passed / resolved', async () => {
     useSpec(SPEC);
     const r = await call('build_data_module', {

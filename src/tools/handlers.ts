@@ -101,6 +101,15 @@ function writeNotes(write: boolean, outcome: WriteOutcome | undefined): string[]
     : [];
 }
 
+/** BREX を 1 層も照合していないときの注記（brex.state が passed でないことを、理由付きで伝える） */
+function brexNotes(verification: VerificationStatus): string[] {
+  const b = verification.brex;
+  if (b.layers > 0 || b.unresolved.length > 0) return [];
+  return [
+    'BREX was not checked: the data module has no brexDmRef (the default BREX was not found or none was given) and no BREX layer was evaluated, so verification.brex.state is "not-run", not "passed". Give allocation.brexDmRef, or point S1000D_SPEC_DIR / csdbDirs at the BREX, and build again.',
+  ];
+}
+
 function fixNotes(applied: AppliedFix[], summary: FixSummary): string[] {
   const notes: string[] = [];
   if (applied.length > 0) {
@@ -225,6 +234,7 @@ async function buildDataModuleTool(args: Args) {
     ...(outcome?.skipped ? { writeSkipped: outcome.skipped } : {}),
     _notes: [
       ...notes,
+      ...brexNotes(loop.verification),
       ...fixNotes(loop.appliedFixes, summary),
       ...writeNotes(write, outcome),
       ...STANDARD_NOTES,

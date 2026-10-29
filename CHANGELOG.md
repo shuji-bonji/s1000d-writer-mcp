@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 (2026-10-29)
+
+hub の E2E テスト（`e2e/`）で見つかった点を直しました。ツールの入出力の形は変えていません。依存の `@shuji-bonji/s1000d-core` は `^0.8.2` です。
+
+### 修正
+
+- `build_data_module` は、既定 BREX が見つからず `brexDmRef` を省いたとき、`_notes` に「`brexDmRef` を省いた」ことしか書かず、BREX を照合していないことが分かりませんでした。照合した層が 0 件で見つからなかった BREX も無いときは、「BREX was not checked」という注記を `_notes` に足します。あわせて core 0.8.2 の修正で、そのときの `verification.brex.state` は `passed` ではなく `not-run` になります（`layers: 0`）。
+
 ## 0.1.1 (2026-10-28)
 
 ### 修正
