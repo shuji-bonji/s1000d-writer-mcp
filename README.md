@@ -48,7 +48,7 @@ A mistake in the draft or the numbering rules is returned not as `isError` but a
 > - **It does not translate.** It only takes sentences out and puts them back. The LLM or a person translates.
 > - **It does not create illustrations or judge Simplified Technical English (STE).** For an illustration it only allocates an ICN and inserts the reference.
 > - What a data module cannot represent, such as hotspot coordinates or part of `scopeRefs` in an experiential manual, is reported in `notRepresented` and never dropped silently.
-> - It does not create an ACT, CCT or PCT. Applicability relies on the `applic` of the draft and an existing applicability repository.
+> - It does not create an ACT, CCT or PCT. Applicability relies on the `applic` of the draft and an existing applicability repository. When a draft given to `build_data_module` has no `applic`, the server does not build it and returns `input-error` (`path` is `/applic`). The server does not decide applicability, so give at least `applic.displayText` (`convert_manual` uses `defaultApplic`, by default the display text "All", for topics without `scopeRefs`).
 
 ## Configuration
 
@@ -57,7 +57,7 @@ A mistake in the draft or the numbering rules is returned not as `isError` but a
 | `S1000D_SPEC_DIR` | The folder where you extracted the S1000D distribution you obtained. The XSDs (`xml_schema_flat/`) and the default BREX are searched under it |
 | `S1000D_CSDB_DIR` | The folder holding the project's data modules. Several can be given, separated by `:` (`;` on Windows). The BREX chain, reference targets and existing issues are searched here, and the first folder is the write destination |
 
-You can also add folders with the tool argument `csdbDirs` (the first one is the write destination).
+You can also give folders with the tool argument `csdbDirs` (the first one is the write destination). When the argument is given, only those folders are used; `S1000D_CSDB_DIR` and `csdbDirs` in the config file are not used (they are not added together). Folders that do not exist are skipped and listed in `_notes` of the response. The first folder may not exist yet; it is created with `write: true`.
 
 ### Config file (when environment variables are not passed, such as a Claude Desktop plugin)
 

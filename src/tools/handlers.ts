@@ -7,6 +7,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import {
   CsdbIndex,
+  DraftInputError,
   DirectoryCsdbSource,
   applyFixes,
   applySegments,
@@ -92,6 +93,9 @@ const STANDARD_NOTES = [
 
 /** 組み立てた XML をそのまま応答に載せ、写しを書くかどうかは write で決める（既定は書かない） */
 const NOT_WRITTEN_NOTE = 'Nothing was written (write is false). The XML is only returned.';
+/** convert_manual で includeXml: false のとき（応答に XML が無い） */
+const NOT_WRITTEN_NO_XML_NOTE =
+  'Nothing was written (write is false). The XML is not returned either (includeXml is false); call again with includeXml: true to get it, or with write: true to write it.';
 
 function writeNotes(write: boolean, outcome: WriteOutcome | undefined): string[] {
   if (!write) return [NOT_WRITTEN_NOTE];
@@ -171,6 +175,13 @@ async function buildDataModuleTool(args: Args) {
     throw new Error('"allocation" is required');
   const draft = args.draft as DraftDataModule;
   const allocation = args.allocation as Allocation;
+  // applic が無いと XSD に通らない DM になる（dmStatus・pmStatus は applic か applicRef が必須）。
+  // 適用範囲はサーバーが決めない（D-18 の境界）ので、組み立てる前に入力の誤りとして返す
+  if (!draft.applic || typeof draft.applic !== 'object')
+    throw new DraftInputError(
+      '/applic',
+      'applic is required (the XSD requires applic in dmStatus / pmStatus). Give at least {"displayText": "..."} stating which products this applies to; the server does not decide applicability.',
+    );
   const ctx: ContextOptions = { extraDirs: strArray(args.csdbDirs) };
   const index = csdbIndex(ctx);
 
@@ -469,7 +480,7 @@ async function convertManualTool(args: Args) {
       ? [
           `Written ${totals.written} file(s)${totals.notWritten ? `; ${totals.notWritten} not written (see writeSkipped)` : ''}.`,
         ]
-      : [NOT_WRITTEN_NOTE]),
+      : [includeXml ? NOT_WRITTEN_NOTE : NOT_WRITTEN_NO_XML_NOTE]),
     ...(totals.appliedFixes > 0
       ? [
           `${totals.appliedFixes} fix(es) with a single certain candidate were applied automatically (appliedFixes of each data module).`,

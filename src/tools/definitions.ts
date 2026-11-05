@@ -35,7 +35,7 @@ const csdbDirsParam = {
   type: 'array',
   items: { type: 'string' },
   description:
-    'CSDB folders (in addition to S1000D_CSDB_DIR) used to resolve references, find BREX and number new objects. The FIRST folder is also where write: true writes.',
+    'CSDB folders used to resolve references, find BREX and number new objects (default: S1000D_CSDB_DIR / the config file). The FIRST folder is also where write: true writes (it may not exist yet). When given, these folders replace S1000D_CSDB_DIR and the csdbDirs of the config file (they are not added to them); other folders that do not exist are skipped and reported in _notes.',
 } as const;
 const pathParam = { type: 'string', description: 'File path of the document.' } as const;
 const xmlParam = {
@@ -152,7 +152,7 @@ export const tools: ToolDefinition[] = [
   {
     name: 'build_data_module',
     description:
-      'Build ONE S1000D data module (descript / proced / process / fault) or publication module (pm) from a structured draft and number it from the allocation rules. You give titles, paragraphs, steps, tables, figures and references as a tree; the server writes the XML (you never write XML, DMCs, ICNs or the BREX reference). The XML is verified (XSD, BREX along the brexDmRef chain, references; applicability too when a product is given); fixes the server is certain about (confidence "exact") are applied automatically and verified again, up to maxFixRounds times. Returns xml, fileName, dmCode (pmCode for a pm), verification, appliedFixes[] (what was changed automatically), fixes[] (what remains: candidates to choose from), the updated ledger and the next ICN number. Writes into the CSDB only when write is true. A malformed draft comes back as error.code "input-error" with the path of the problem.',
+      'Build ONE S1000D data module (descript / proced / process / fault) or publication module (pm) from a structured draft and number it from the allocation rules. You give titles, paragraphs, steps, tables, figures and references as a tree; the server writes the XML (you never write XML, DMCs, ICNs or the BREX reference). The XML is verified (XSD, BREX along the brexDmRef chain, references; applicability too when a product is given); fixes the server is certain about (confidence "exact") are applied automatically and verified again, up to maxFixRounds times. Returns xml, fileName, dmCode (pmCode for a pm), verification, appliedFixes[] (what was changed automatically), fixes[] (what remains: candidates to choose from), the updated ledger and the next ICN number. Writes into the CSDB only when write is true. A malformed draft comes back as error.code "input-error" with the path of the problem; a draft without applic is one (path "/applic"): the server does not decide applicability, so give at least applic.displayText.',
     inputSchema: {
       type: 'object',
       properties: {

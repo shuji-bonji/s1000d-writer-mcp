@@ -383,6 +383,42 @@ describe('build_data_module', () => {
     });
   });
 
+  it('applic の無い下書きは組み立てず、path が /applic の input-error（#1）', async () => {
+    const r = await call('build_data_module', {
+      draft: draft({ applic: undefined }),
+      allocation: allocation(),
+    });
+    expect(r.isError).toBe(false);
+    expect(r.data.error).toMatchObject({ code: 'input-error', path: '/applic' });
+    expect(r.data.error.detail).toContain('displayText');
+    expect(r.data.xml).toBeUndefined();
+  });
+
+  it('csdbDirs を渡すと S1000D_CSDB_DIR は使わず、無いフォルダーは _notes で知らせる', async () => {
+    const env = mkdtempSync(join(tmpdir(), 's1000d-writer-mcp-env-'));
+    const nowhere = join(tmpdir(), 's1000d-writer-mcp-no-such-csdb');
+    process.env.S1000D_CSDB_DIR = env;
+    try {
+      const r = await call('build_data_module', {
+        draft: draft(),
+        allocation: allocation(),
+        csdbDirs: [LAX, nowhere],
+      });
+      const notes = r.data._notes.join(' ');
+      expect(notes).toContain(nowhere);
+      expect(notes).toContain('the csdbDirs argument');
+      const first = await call('build_data_module', {
+        draft: draft(),
+        allocation: allocation(),
+        csdbDirs: [nowhere, LAX],
+      });
+      expect(first.data._notes.join(' ')).toContain('does not exist yet');
+    } finally {
+      delete process.env.S1000D_CSDB_DIR;
+      rmSync(env, { recursive: true, force: true });
+    }
+  });
+
   it('台帳を渡し直すと同じ sourceId には同じ DMC。別の sourceId は分解コードが進む。図は ICN を採番して返す', async () => {
     const first = await call('build_data_module', {
       draft: draft({
@@ -857,6 +893,10 @@ describe('convert_manual', () => {
     );
     expect(r.data.summary.dataModules).toBe(1);
     expect(r.data.dataModules[0].topicId).toBe('topic-open-door');
+    const quiet = await call('convert_manual', withBrex({ csdbDirs: [LAX], includeXml: false }));
+    expect(quiet.data.dataModules.every((d: { xml?: string }) => d.xml === undefined)).toBe(true);
+    expect(quiet.data._notes.join(' ')).toContain('not returned either (includeXml is false)');
+    expect(quiet.data._notes.join(' ')).not.toContain('The XML is only returned');
     const bad = await call('convert_manual', withBrex({ csdbDirs: [LAX], topics: ['nope'] }));
     expect(bad.data.error).toMatchObject({ code: 'input-error', path: '/topics' });
   });

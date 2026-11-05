@@ -31,14 +31,47 @@ function existingDirs(dirs: string[]): string[] {
   return [...new Set(dirs.filter((d) => existsSync(d) && statSync(d).isDirectory()))];
 }
 
-/** CSDB として探すフォルダー（優先順: ツール引数 → S1000D_CSDB_DIR）。存在するものだけ */
-export function csdbSearchDirs(options: ContextOptions = {}): string[] {
-  return existingDirs([...(options.extraDirs ?? []), ...csdbDirs()]);
+/**
+ * 指定されたフォルダーの並び。ツール引数の `csdbDirs` を渡したときはそれだけを使い、
+ * 設定（S1000D_CSDB_DIR・設定ファイルの csdbDirs）は使わない。渡さないときは設定を使う
+ */
+function requestedCsdbDirs(options: ContextOptions): string[] {
+  return options.extraDirs !== undefined && options.extraDirs.length > 0
+    ? options.extraDirs
+    : csdbDirs();
 }
 
-/** 書き込み先のフォルダー（`csdbDirs` の最初のフォルダー。無ければ S1000D_CSDB_DIR の最初）。まだ存在しなくてもよい */
+/** CSDB として探すフォルダー（ツール引数の csdbDirs があればそれだけ。無ければ S1000D_CSDB_DIR・設定ファイル）。存在するものだけ */
+export function csdbSearchDirs(options: ContextOptions = {}): string[] {
+  return existingDirs(requestedCsdbDirs(options));
+}
+
+/** 書き込み先のフォルダー（`csdbDirs` の最初のフォルダー。渡さないときは S1000D_CSDB_DIR の最初）。まだ存在しなくてもよい */
 export function writeDir(options: ContextOptions = {}): string | undefined {
-  return [...(options.extraDirs ?? []), ...csdbDirs()][0];
+  return requestedCsdbDirs(options)[0];
+}
+
+/** 使わなかったフォルダーの注記（無ければ空）。書き込み先（1 件目）はまだ無くてよいので、そう書き分ける */
+export function missingCsdbDirsNotes(options: ContextOptions = {}): string[] {
+  const requested = [...new Set(requestedCsdbDirs(options))];
+  const missing = requested.filter((d) => !(existsSync(d) && statSync(d).isDirectory()));
+  if (missing.length === 0) return [];
+  const from =
+    options.extraDirs !== undefined && options.extraDirs.length > 0
+      ? 'the csdbDirs argument'
+      : `${ENV.csdbDirs} / the config file`;
+  const notes: string[] = [];
+  const [first, ...rest] = missing;
+  if (first === requested[0]) {
+    notes.push(
+      `The write folder (the first CSDB folder from ${from}) does not exist yet: ${first}. It is not searched; it is created when write is true.`,
+    );
+  } else rest.unshift(first!);
+  if (rest.length > 0)
+    notes.push(
+      `These CSDB folders from ${from} do not exist or are not folders, and were not searched: ${rest.join(', ')}`,
+    );
+  return notes;
 }
 
 /** 書き込み先 */
@@ -99,7 +132,7 @@ export function specDirs(): string[] {
 }
 
 export function configNotes(options: ContextOptions = {}): string[] {
-  const notes: string[] = [...stackConfigWarnings()];
+  const notes: string[] = [...stackConfigWarnings(), ...missingCsdbDirsNotes(options)];
   if (!specDir()) {
     notes.push(
       `${ENV.specDir} is not set: verification.schema is reported as schema-not-found and the default BREX cannot be located. ${specDirHint()}`,
