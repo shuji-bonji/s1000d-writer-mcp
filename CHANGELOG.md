@@ -1,5 +1,17 @@
 # Changelog
 
+## 未リリース
+
+実在の技術マニュアルを使った確認で見つかった、`convert_manual` の不足を直しました（s1000d-stack の docs/notes/tm-eval-requests.md の W-3）。ツールの入出力の形は変えていません。
+
+### 変更（出力が変わります）
+
+- **手順の飛び先（`Step.next`）を参照として書きます。** これまでは DM に入れず、`notRepresented` に「Step.next」として件数を返していました。
+  - 同じ Topic の手順へは `internalRef`、別の Topic の手順・画面へはその DM への `dmRef` を、「次に進む: 」（条件があれば「〈条件〉、次に進む: 」）の段落にして手順の中に置きます。
+  - 困ったときの対処（`isolationProcedureEnd`）は、条件の無い飛び先を対処の文の後ろに参照として並べます。
+  - 並びのとおりに次の手順へ進むだけの `next`（条件が無く、行き先が次の手順・最初の子・親の次の手順）は、DM の中の並びが表しているので何も書かず、`notRepresented` にも数えません。
+  - `dmRef` は DM を指すだけです。行き先が別の DM の先頭以外の手順のときは、その位置を `notRepresented` に「the step inside another data module that a Step.next points at」として返します。変換しない Topic への `next` と、行き先の無い `next` も件数で返します。
+
 ## 0.2.0 (2026-11-06)
 
 Grok Build の試用（hub の `eval/hosts/grok-build/reports/2026-11/FINDINGS.md` の F-03・F-05・F-07）で見つかった点を直しました（[#1](https://github.com/shuji-bonji/s1000d-writer-mcp/issues/1)・[#2](https://github.com/shuji-bonji/s1000d-writer-mcp/issues/2)）。依存の `@shuji-bonji/s1000d-core` は `^0.8.2` のままです（core 0.8.3 の「前に足す」修正候補は、0.8.3 を入れたときに `fixes[]` に出ます）。

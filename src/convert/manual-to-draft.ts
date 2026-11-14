@@ -16,8 +16,12 @@
  * 表せないもの（`notRepresented` に件数と場所を返す。黙って捨てない）:
  * - Hotspot の形と座標、`hotspot/@applicationStructureIdent`（core の `DraftNode` に hotspot が無い）
  * - 手順・ブロックごとの scopeRefs（DM 単位の applic だけ。`applicRefId` が指す applic の置き場所が core に無い）
- * - 木にならない遷移（戻る遷移など）、Step.next / targetRef、Asset.display、ACT（`DraftKind` に無い）
+ * - 木にならない遷移（戻る遷移など）、Step.targetRef、Asset.display、ACT（`DraftKind` に無い）
  * 木にならない遷移は、画面の proced の手順の文に「次の画面」として書く。
+ *
+ * Step.next（手順の飛び先）は参照にする: 同じ Topic の手順へは internalRef、別の Topic の手順・画面へは
+ * その DM への dmRef。並びのとおりに次の手順へ進むだけの next は、並びが表しているので何も書かない。
+ * dmRef は DM を指すだけなので、行き先が別の DM の先頭以外の手順のときは、その位置を `notRepresented` に返す。
  */
 import { extname } from 'node:path';
 import {
@@ -48,6 +52,7 @@ import type {
   Screen,
   Step,
   Topic,
+  Transition,
 } from '@shuji-bonji/experiential-manual-model';
 
 export interface ConvertOptions {
@@ -173,6 +178,12 @@ export function issueInfoOfVersion(number: string): IssueInfo | undefined {
   return { issueNumber: m[1]!.padStart(3, '0'), inWork: (m[2] ?? '0').padStart(2, '0') };
 }
 
+/** 手順の「次」の集まりに、最初の子の id を足す（子があれば、並びの次は最初の子） */
+function withFirstChild(s: Step, next: Set<string>): Set<string> {
+  const first = s.children?.[0];
+  return first ? new Set([...next, first.id]) : next;
+}
+
 /** XML の id にできる文字列にする（英字か _ で始め、英数字・_・.・- だけ） */
 export function xmlId(raw: string): string {
   const s = raw.replace(/[^A-Za-z0-9_.-]/g, '-');
@@ -182,6 +193,8 @@ export function xmlId(raw: string): string {
 interface Phrases {
   join(a: string, b: string): string;
   hotspot(label: string, action: Hotspot['action'], next?: string, condition?: string): string;
+  /** 手順の飛び先の前に置く文。この文の後ろに参照が並ぶ */
+  goTo(condition?: string): string;
   all: string;
   glossary: string;
   sep: string;
@@ -202,6 +215,7 @@ const PHRASES: Record<'ja' | 'en', Phrases> = {
       const go = next ? `${condition ? `${condition}、` : ''}「${next}」に進む。` : '';
       return `${label}を${verb}。${go}`;
     },
+    goTo: (condition) => `${condition ? `${condition}、` : ''}次に進む: `,
     all: 'すべて',
     glossary: '用語',
     sep: '、',
@@ -220,6 +234,7 @@ const PHRASES: Record<'ja' | 'en', Phrases> = {
       const go = next ? ` ${condition ? `If ${condition}, go` : 'Go'} to "${next}".` : '';
       return `${verb} ${label}.${go}`;
     },
+    goTo: (condition) => `${condition ? `If ${condition}, go` : 'Go'} to: `,
     all: 'All',
     glossary: 'Glossary',
     sep: ', ',
@@ -274,6 +289,13 @@ class Converter {
   private issueInfo?: IssueInfo;
   private issueDate?: string;
   private defaultApplic!: DraftApplic;
+  /** sourceId → DMC（変換する Topic と画面だけ） */
+  private dmOf = new Map<string, DmCode>();
+  /** Step.id → その手順がある Topic と、Topic の先頭の手順かどうか（マニュアル全体） */
+  private readonly stepAt = new Map<string, { topicId: string; first: boolean }>();
+  /** Screen.id → その画面がある Topic（マニュアル全体） */
+  private readonly screenAt = new Map<string, string>();
+  private readonly topicIds = new Set<string>();
 
   constructor(
     private readonly manual: Manual,
@@ -282,6 +304,16 @@ class Converter {
     this.allocation = { ...options.allocation, ledger: { ...(options.allocation.ledger ?? {}) } };
     for (const s of manual.scopes ?? []) this.scopes.set(s.id, s);
     for (const a of manual.assets ?? []) this.assets.set(a.id, a);
+    for (const t of manual.topics) {
+      this.topicIds.add(t.id);
+      for (const sc of t.screens ?? []) this.screenAt.set(sc.id, t.id);
+      const walk = (steps: Step[], top: boolean) =>
+        steps.forEach((st, i) => {
+          this.stepAt.set(st.id, { topicId: t.id, first: top && i === 0 });
+          walk(st.children ?? [], false);
+        });
+      walk(t.steps ?? [], true);
+    }
   }
 
   private lose(what: string, where: string): void {
@@ -449,12 +481,57 @@ class Converter {
     return body;
   }
 
+  // ---- 手順の飛び先（Step.next） ----
+
+  /** 飛び先 1 つを参照にする。同じ Topic の手順は internalRef、別の Topic の手順・画面は dmRef。表せなければ undefined */
+  private nextRef(tr: Transition, topic: Topic, where: string): DraftRef | undefined {
+    const dmRef = (sourceId: string): DraftRef | undefined => {
+      const dm = this.dmOf.get(sourceId);
+      if (!dm) {
+        this.lose('Step.next to a topic that is not converted in this call', where);
+        return undefined;
+      }
+      return { kind: 'dmRef', target: formatDmc(dm), title: this.manual.title };
+    };
+    const step = this.stepAt.get(tr.to);
+    if (step) {
+      if (step.topicId === topic.id)
+        return {
+          kind: 'internalRef',
+          target: xmlId(tr.to),
+          ...(tr.label ? { title: tr.label } : {}),
+        };
+      const ref = dmRef(step.topicId);
+      if (ref && !step.first)
+        this.lose(
+          'the step inside another data module that a Step.next points at (the dmRef points at the data module)',
+          where,
+        );
+      return ref;
+    }
+    const screenTopic = this.screenAt.get(tr.to);
+    if (screenTopic) return dmRef(`${screenTopic}/${tr.to}`);
+    if (this.topicIds.has(tr.to)) return dmRef(tr.to);
+    this.lose('Step.next to an id that is not a step, a screen or a topic', where);
+    return undefined;
+  }
+
+  /** 飛び先を、文（条件があれば条件）と参照の段落にする */
+  private nextParas(s: Step, topic: Topic, where: string, following: Set<string>): DraftNode[] {
+    const out: DraftNode[] = [];
+    for (const tr of s.next ?? []) {
+      // 並びのとおりに次へ進むだけなら、DM の中の並びが表している
+      if (!tr.condition && following.has(tr.to)) continue;
+      const ref = this.nextRef(tr, topic, where);
+      if (ref) out.push({ kind: 'para', text: this.phrases.goTo(tr.condition), refs: [ref] });
+    }
+    return out;
+  }
+
   // ---- procedure ----
 
-  private step(s: Step, where: string): DraftNode {
+  private step(s: Step, where: string, topic: Topic, following: Set<string>): DraftNode {
     this.scopeLoss(s.scopeRefs, where);
-    if (s.next && s.next.length > 0)
-      this.lose('Step.next (the order of steps is the order in the data module)', where);
     if (s.targetRef) this.lose('Step.targetRef', where);
     if (s.question || s.answers)
       this.lose('question / answers on a step of a procedure (use troubleshooting)', where);
@@ -464,12 +541,22 @@ class Converter {
       const f = this.figureOf(ref, where);
       if (f) children.push(f);
     }
-    (s.children ?? []).forEach((c, i) => children.push(this.step(c, `${where}/children/${i}`)));
+    children.push(...this.nextParas(s, topic, where, following));
+    const kids = s.children ?? [];
+    kids.forEach((c, i) => {
+      // 子の「次」は、次の兄弟。最後の子は、親の「次」に進む
+      const next = kids[i + 1] ? new Set([kids[i + 1]!.id]) : following;
+      children.push(this.step(c, `${where}/children/${i}`, topic, withFirstChild(c, next)));
+    });
     return { kind: 'step', id: xmlId(s.id), text, ...(children.length ? { children } : {}) };
   }
 
   private procedure(t: Topic): DraftNode[] {
-    return (t.steps ?? []).map((s, i) => this.step(s, `/topics/${t.id}/steps/${i}`));
+    const steps = t.steps ?? [];
+    return steps.map((s, i) => {
+      const next = new Set(steps[i + 1] ? [steps[i + 1]!.id] : []);
+      return this.step(s, `/topics/${t.id}/steps/${i}`, t, withFirstChild(s, next));
+    });
   }
 
   // ---- troubleshooting ----
@@ -492,8 +579,6 @@ class Converter {
       );
     return flat.map(({ step: s, where }) => {
       this.scopeLoss(s.scopeRefs, where);
-      if (s.next && s.next.length > 0)
-        this.lose('Step.next on a troubleshooting step (use answers)', where);
       if (s.targetRef) this.lose('Step.targetRef', where);
       const text = s.expected ? this.phrases.join(s.text, s.expected) : s.text;
       const children: DraftNode[] = [...this.admonitions(s.admonitions)];
@@ -502,6 +587,15 @@ class Converter {
         if (f) children.push(f);
       }
       const node: DraftNode = { kind: 'step', id: xmlId(s.id), text };
+      // 飛び先: 条件が無ければ、対処の文の後ろに参照を並べる。条件があれば、条件ごとの文にする
+      const next = s.next ?? [];
+      if (next.some((tr) => tr.condition)) children.push(...this.nextParas(s, t, where, new Set()));
+      else {
+        const refs = next
+          .map((tr) => this.nextRef(tr, t, where))
+          .filter((r): r is DraftRef => r !== undefined);
+        if (refs.length > 0) node.refs = refs;
+      }
       if (s.question) node.question = s.question;
       if (s.answers && s.answers.length > 0) {
         node.choices = s.answers.map((a) => ({ text: a.text, next: xmlId(a.next.to) }));
@@ -665,7 +759,7 @@ class Converter {
     }
     const glossary = !wanted && (manual.glossary?.length ?? 0) > 0;
     const glossaryId = `${manual.id}#glossary`;
-    const dmOf = new Map<string, DmCode>();
+    const dmOf = this.dmOf;
     for (const p of plan) dmOf.set(p.sourceId, this.allocate(p.sourceId, p.kind));
     if (glossary) dmOf.set(glossaryId, this.allocate(glossaryId, 'descript'));
 
