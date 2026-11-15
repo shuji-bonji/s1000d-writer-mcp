@@ -130,20 +130,40 @@ describe('manualToDrafts: Step.next', () => {
       {
         kind: 'para',
         text: '次に進む: ',
-        refs: [{ kind: 'dmRef', target: dmcOf(r, 't-refill'), title: manual.title }],
+        refs: [
+          {
+            kind: 'dmRef',
+            target: dmcOf(r, 't-refill'),
+            title: manual.title,
+            infoName: '用紙の補充',
+          },
+        ],
       },
       {
         kind: 'para',
         text: '用紙が無いとき、次に進む: ',
         // 別の DM の先頭以外の手順は、fragment（@referredFragment）で指す
         refs: [
-          { kind: 'dmRef', target: dmcOf(r, 't-refill'), title: manual.title, fragment: 'r2' },
+          {
+            kind: 'dmRef',
+            target: dmcOf(r, 't-refill'),
+            title: manual.title,
+            infoName: '用紙の補充',
+            fragment: 'r2',
+          },
         ],
       },
       {
         kind: 'para',
         text: '次に進む: ',
-        refs: [{ kind: 'dmRef', target: dmcOf(r, 't-screens/scr-main'), title: manual.title }],
+        refs: [
+          {
+            kind: 'dmRef',
+            target: dmcOf(r, 't-screens/scr-main'),
+            title: manual.title,
+            infoName: '画面 - メイン画面',
+          },
+        ],
       },
     ]);
     // 飛び先の段落は、入れ子の手順より前に置く
@@ -170,7 +190,7 @@ describe('manualToDrafts: Step.next', () => {
     const [, a1, a2] = bodyOf(r, 't-trouble');
     expect(a1).toMatchObject({
       text: '始動の手順に戻って、続きを行う。',
-      refs: [{ kind: 'dmRef', target: dmcOf(r, 't-start'), title: manual.title }],
+      refs: [{ kind: 'dmRef', target: dmcOf(r, 't-start'), title: manual.title, infoName: '始動' }],
     });
     expect(a1!.children).toBeUndefined();
     expect(a2!.refs).toBeUndefined();
@@ -190,6 +210,47 @@ describe('manualToDrafts: Step.next', () => {
     const r = run(['t-trouble']);
     expect(bodyOf(r, 't-trouble')[1]!.refs).toBeUndefined();
     expect(lost(r)['Step.next to a topic that is not converted in this call']).toBe(1);
+  });
+});
+
+describe('manualToDrafts: dmRef の題名（dmTitle の techName と infoName）', () => {
+  /** 下書きの木から dmRef を集める */
+  const dmRefs = (nodes: DraftNode[]): NonNullable<DraftNode['refs']> =>
+    nodes.flatMap((n) => [
+      ...(n.refs ?? []).filter((x) => x.kind === 'dmRef'),
+      ...dmRefs(n.children ?? []),
+    ]);
+  const withGlossary = (): Manual => ({
+    ...manual,
+    glossary: [{ term: 'DCS', definition: 'デジタル制御装置' }],
+  });
+
+  it('どの参照にも、techName にマニュアルの題名、infoName に行き先の DM の infoName を書く', () => {
+    const r = manualToDrafts(withGlossary(), { allocation, securityClassification: '01' });
+    const infoNameOf = new Map(
+      r.drafts.filter((d) => d.dmCode).map((d) => [dmcOf(r, d.sourceId), d.draft.title.infoName]),
+    );
+    const refs = r.drafts.flatMap((d) => dmRefs(d.draft.body));
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      expect(ref.title).toBe(manual.title);
+      expect(ref.infoName).toBeDefined();
+      expect(ref.infoName).toBe(infoNameOf.get(ref.target));
+    }
+  });
+
+  it('公開物（PM）の項目と画面の流れの節にも、行き先の作業の名前が入る', () => {
+    const r = manualToDrafts(withGlossary(), { allocation, securityClassification: '01' });
+    const pm = r.drafts.find((d) => d.role === 'publication-module')!.draft.body;
+    expect(dmRefs(pm).map((x) => x.infoName)).toEqual([
+      '始動',
+      '用紙の補充',
+      '画面',
+      '画面 - メイン画面',
+      '始動しないとき',
+      '用語',
+    ]);
+    expect(dmRefs(bodyOf(r, 't-screens')).map((x) => x.infoName)).toEqual(['画面 - メイン画面']);
   });
 });
 

@@ -333,6 +333,8 @@ class Converter {
   private defaultApplic!: DraftApplic;
   /** sourceId → DMC（変換する Topic と画面だけ） */
   private dmOf = new Map<string, DmCode>();
+  /** sourceId → その DM の題名の infoName（base に渡す値と同じ）。dmRef の dmTitle に書く */
+  private readonly infoNameOf = new Map<string, string>();
   /** Step.id → その手順がある Topic と、Topic の先頭の手順かどうか（マニュアル全体） */
   private readonly stepAt = new Map<string, { topicId: string; first: boolean }>();
   /** Screen.id → その画面がある Topic（マニュアル全体） */
@@ -428,6 +430,17 @@ class Converter {
     };
   }
 
+  /** sourceId の DM への dmRef。dmTitle には、マニュアルの題名（techName）と行き先の DM の infoName を書く */
+  private dmRefTo(sourceId: string, dm: DmCode): DraftRef {
+    const infoName = this.infoNameOf.get(sourceId);
+    return {
+      kind: 'dmRef',
+      target: formatDmc(dm),
+      title: this.manual.title,
+      ...(infoName ? { infoName } : {}),
+    };
+  }
+
   /** 注意書き。見出し（title）があれば、見出しと本文を 2 つの段落にする（S1000D の警告・注意に見出しの要素は無い） */
   private admonitions(list: Admonition[] | undefined): DraftNode[] {
     return (list ?? []).map((a) =>
@@ -458,13 +471,7 @@ class Converter {
         this.lose('prerequisites topicRef to a topic that is not converted in this call', w);
         return undefined;
       }
-      const title = this.manual.topics.find((x) => x.id === id)?.title;
-      return {
-        kind: 'dmRef',
-        target: formatDmc(dm),
-        title: this.manual.title,
-        ...(title ? { infoName: title } : {}),
-      };
+      return this.dmRefTo(id, dm);
     };
     (pre.conditions ?? []).forEach((c, i) => {
       const ref = c.topicRef ? topicRef(c.topicRef, `${where}/conditions/${i}`) : undefined;
@@ -647,7 +654,7 @@ class Converter {
         this.lose('Step.next to a topic that is not converted in this call', where);
         return undefined;
       }
-      return { kind: 'dmRef', target: formatDmc(dm), title: this.manual.title };
+      return this.dmRefTo(sourceId, dm);
     };
     const step = this.stepAt.get(tr.to);
     if (step) {
@@ -809,7 +816,7 @@ class Converter {
     const node = (s: Screen): DraftNode => ({
       kind: 'section',
       title: this.screenLabel(s),
-      refs: [{ kind: 'dmRef', target: formatDmc(dmOf.get(s.id)!), title: this.manual.title }],
+      refs: [this.dmRefTo(`${t.id}/${s.id}`, dmOf.get(s.id)!)],
     });
     const visit = (s: Screen): DraftNode[] => {
       visited.add(s.id);
@@ -916,6 +923,13 @@ class Converter {
     const dmOf = this.dmOf;
     for (const p of plan) dmOf.set(p.sourceId, this.allocate(p.sourceId, p.kind));
     if (glossary) dmOf.set(glossaryId, this.allocate(glossaryId, 'descript'));
+    // 参照の dmTitle/infoName に使う。2. で base に渡す infoName と同じ規則で作る
+    for (const p of plan)
+      this.infoNameOf.set(
+        p.sourceId,
+        p.role === 'screen' ? `${p.topic.title} - ${this.screenLabel(p.screen!)}` : p.topic.title,
+      );
+    if (glossary) this.infoNameOf.set(glossaryId, this.phrases.glossary);
 
     // 2. 内容部
     for (const p of plan) {
@@ -1015,17 +1029,17 @@ class Converter {
 
     // 3. 公開物（PM）
     if (options.publicationModule !== false) {
-      const entry = (dm: DmCode): DraftNode => ({
+      const entry = (sourceId: string): DraftNode => ({
         kind: 'entry',
-        refs: [{ kind: 'dmRef', target: formatDmc(dm), title: manual.title }],
+        refs: [this.dmRefTo(sourceId, dmOf.get(sourceId)!)],
       });
       const sections: DraftNode[] = topics.map((t) => ({
         kind: 'section',
         title: t.title,
         children: [
-          entry(dmOf.get(t.id)!),
+          entry(t.id),
           ...(t.kind === 'screenFlow'
-            ? (t.screens ?? []).map((s) => entry(dmOf.get(`${t.id}/${s.id}`)!))
+            ? (t.screens ?? []).map((s) => entry(`${t.id}/${s.id}`))
             : []),
         ],
       }));
@@ -1033,7 +1047,7 @@ class Converter {
         sections.push({
           kind: 'section',
           title: this.phrases.glossary,
-          children: [entry(dmOf.get(glossaryId)!)],
+          children: [entry(glossaryId)],
         });
       const draft = this.base(manual.id, 'pm', undefined, undefined, sections);
       const pmc = allocatePmc(manual.id, {}, this.allocation, options.index);
