@@ -280,13 +280,15 @@ describe('manualToDrafts: 作業前の要件（Topic.prerequisites）', () => {
     expect(bodyOf(r, 't-refill')[0]).toMatchObject({ kind: 'step' });
   });
 
-  it('識別子か数量の無い品目は書かず、件数で返す（値は補わない）。写せないものも件数で返す', () => {
-    const l = lost(convert());
-    expect(
-      l[
-        'prerequisites item without manufacturerCode or quantity (S1000D requires an identifier and a quantity for each item; none is made up)'
-      ],
-    ).toBe(2);
+  it('識別子か数量の無い品目がある Topic の下書きには inputError が付く（値は補わない）。写せないものは件数で返す', () => {
+    const r = convert();
+    const l = lost(r);
+    const blocked = r.drafts.find((d) => d.sourceId === 't-start')!.inputError!;
+    expect(blocked.path).toBe('/topics/t-start/prerequisites/equipment/1');
+    expect(blocked.detail).toContain('/topics/t-start/prerequisites/supplies/0');
+    expect(blocked.detail).toContain('noSupportEquips / noSupplies');
+    expect(r.drafts.filter((d) => d.inputError)).toHaveLength(1);
+    expect(Object.keys(l).join('\n')).not.toContain('prerequisites item');
     expect(
       l['DocumentReference.code on a reference to a topic (the data module is the reference)'],
     ).toBe(1);

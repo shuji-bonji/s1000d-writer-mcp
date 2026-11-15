@@ -327,6 +327,18 @@ async function convertManualTool(args: Args) {
   };
   const entries: ConvertedEntry[] = [];
   for (const item of conv.drafts) {
+    if (item.inputError) {
+      // 書くと誤って読める DM になる（変換のときに分かっている）。組み立てない
+      entries.push({
+        item,
+        error: {
+          code: 'input-error',
+          path: item.inputError.path,
+          detail: `${item.sourceId}: ${item.inputError.detail}`,
+        },
+      });
+      continue;
+    }
     try {
       const built = buildDataModule(item.draft, alloc, buildOptions);
       alloc = { ...alloc, ledger: built.ledger, icn: { ...alloc.icn, next: built.icnNext } };

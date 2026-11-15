@@ -98,6 +98,12 @@ export interface ConvertedDraft {
   dmCode?: DmCode;
   /** 採番済みの PMC の文字列 */
   pmCode?: string;
+  /**
+   * この下書きを組み立ててはいけない理由（マニュアルの中の場所と説明）。
+   * 書くと内容が誤って読める DM になるときに付く（例: 識別子か数量の無い品目。書かなければ `noSupplies` になる）。
+   * 呼び出し側は組み立てずに、`input-error` として返す。
+   */
+  inputError?: { path: string; detail: string };
 }
 
 export interface ConvertedAsset {
@@ -352,6 +358,9 @@ class Converter {
     }
   }
 
+  /** 組み立てを止める理由になった品目の場所（Topic 1 つを写す間だけ溜める） */
+  private blocked: string[] = [];
+
   private lose(what: string, where: string): void {
     const e = this.lost.get(what) ?? { count: 0, where: [] };
     e.count++;
@@ -489,10 +498,9 @@ class Converter {
     ] as const) {
       (pre[key] ?? []).forEach((item, i) => {
         if (!item.manufacturerCode || !item.quantity) {
-          this.lose(
-            'prerequisites item without manufacturerCode or quantity (S1000D requires an identifier and a quantity for each item; none is made up)',
-            `${where}/${key}/${i}`,
-          );
+          // 品目を落とすと、その区分は XSD の形の上で noSupplies などになり、「要らない」と読める DM になる。
+          // 値は補わない。この Topic の DM は組み立てない
+          this.blocked.push(`${where}/${key}/${i}`);
           return;
         }
         children.push({
@@ -508,6 +516,25 @@ class Converter {
     }
     children.push(...this.admonitions(pre.safety));
     return children.length > 0 ? { kind: 'requirements', children } : undefined;
+  }
+
+  /** 組み立てを止める理由になった品目の場所を取り出して、空にする */
+  private takeBlocked(): ConvertedDraft['inputError'] {
+    const paths = this.blocked;
+    this.blocked = [];
+    if (paths.length === 0) return undefined;
+    const kinds = { equipment: 'noSupportEquips', supplies: 'noSupplies', spares: 'noSpares' };
+    const none = [
+      ...new Set(paths.map((p) => kinds[p.split('/').at(-2) as keyof typeof kinds])),
+    ].join(' / ');
+    return {
+      path: paths[0]!,
+      detail:
+        `${paths.length} prerequisites item(s) have no manufacturerCode or no quantity (${paths.join(', ')}). ` +
+        'S1000D requires an identifier and a quantity for each item, and no value is made up. ' +
+        `Leaving the items out would write ${none}, which reads as "nothing is required", so this data module is not built. ` +
+        'Give manufacturerCode and quantity (quantity may be text such as "As required"), or remove the items from prerequisites.',
+    };
   }
 
   /** `requirements`（あれば）を本体の前に置く */
@@ -954,8 +981,10 @@ class Converter {
           'prerequisites on a topic that is not a procedure or troubleshooting topic',
           `/topics/${t.id}/prerequisites`,
         );
+      const inputError = this.takeBlocked();
       this.drafts.push({
         draft,
+        ...(inputError ? { inputError } : {}),
         role: 'topic',
         sourceId: p.sourceId,
         topicId: t.id,

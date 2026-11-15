@@ -311,12 +311,6 @@
             "manufacturerCode": "K0001"
           }
         ],
-        "supplies": [
-          {
-            "name": "ウエス",
-            "note": "汚れを拭くときに使う"
-          }
-        ],
         "safety": [
           {
             "level": "warning",

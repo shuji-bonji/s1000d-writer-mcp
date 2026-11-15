@@ -836,9 +836,28 @@ describe('convert_manual', () => {
     expect(proced).toMatch(/<supportEquipDescr>\s*<name>保守鍵<\/name>/);
     expect(proced).toMatch(/<reqSafety>\s*<safetyRqmts>\s*<warning>/);
     expect(proced).not.toContain('<noSafety');
-    // 識別子の無い品目（ウエス）は書かず、件数で返す
-    expect(proced).toContain('<noSupplies');
-    expect(lost).toContain('prerequisites item without manufacturerCode or quantity');
+    expect(r.data.summary.failedToBuild).toBe(0);
+  });
+
+  it('識別子か数量の無い品目がある Topic の DM は作らず、input-error で場所を返す（noSupplies と書かない）', async () => {
+    useSpec(SPEC);
+    const manual = JSON.parse(readFileSync(MANUAL, 'utf8'));
+    const topic = manual.topics.find((t: { prerequisites?: unknown }) => t.prerequisites);
+    topic.prerequisites.supplies = [{ name: 'ウエス', note: '汚れを拭くときに使う' }];
+    const r = await call(
+      'convert_manual',
+      withBrex({ manualPath: undefined, manual, csdbDirs: [tmp(), LAX] }),
+    );
+    const row = r.data.dataModules.find((d: { sourceId: string }) => d.sourceId === topic.id);
+    expect(row.error.code).toBe('input-error');
+    expect(row.error.path).toBe(`/topics/${topic.id}/prerequisites/supplies/0`);
+    expect(row.error.detail).toContain('noSupplies');
+    expect(row.xml).toBeUndefined();
+    // ほかの DM は作る
+    expect(r.data.summary.failedToBuild).toBe(1);
+    expect(r.data.summary.dataModules).toBeGreaterThan(1);
+    const lost = r.data.notRepresented.map((n: { what: string }) => n.what).join('\n');
+    expect(lost).not.toContain('prerequisites item');
   });
 
   it('write: true で DM・PM を書き、原本を ICN のファイル名でコピーする。台帳を渡し直すと同じ DMC になる', async () => {
