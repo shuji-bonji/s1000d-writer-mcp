@@ -26,8 +26,10 @@
  * 作業前の要件（`Topic.prerequisites`。procedure / troubleshooting）は、DM の先頭の `requirements` に写す:
  * conditions → para（topicRef があればその DM への dmRef）、personnel → person、references → document、
  * equipment / supplies / spares → equipment / supply / spare、safety → admonition。
- * S1000D の品目は識別子と数量が要るので、manufacturerCode か quantity の無い品目は書かず、`notRepresented` に返す
- * （値は補わない）。
+ * S1000D の品目は識別子と数量が要る。識別子（natoStockNumber か manufacturerCode）か quantity の無い品目がある
+ * Topic の下書きには `inputError` を付け、呼び出し側は組み立てない（値は補わない）。
+ * partNumber は identNumber に書くので manufacturerCode が要る。natoStockNumber だけがある品目の partNumber は
+ * 書かず、`notRepresented` に返す。
  *
  * 画面の手順の文は、Hotspot の名前（`label`）だけから作る。説明（`description`）は後ろの別の文に、
  * 図の番号（`callout`）は文の先頭に書く。
@@ -504,7 +506,7 @@ class Converter {
       ['spares', 'spare'],
     ] as const) {
       (pre[key] ?? []).forEach((item, i) => {
-        if (!item.manufacturerCode || !item.quantity) {
+        if ((!item.manufacturerCode && !item.natoStockNumber) || !item.quantity) {
           // 品目を落とすと、その区分は XSD の形の上で noSupplies などになり、「要らない」と読める DM になる。
           // 値は補わない。この Topic の DM は組み立てない
           this.blocked.push(`${where}/${key}/${i}`);
@@ -516,9 +518,20 @@ class Converter {
           ...(item.note ? { text: item.note } : {}),
           quantity: item.quantity,
           ...(item.unit ? { unit: item.unit } : {}),
-          ...(item.partNumber ? { partNumber: item.partNumber } : {}),
-          manufacturerCode: item.manufacturerCode,
+          ...(item.manufacturerCode
+            ? {
+                ...(item.partNumber ? { partNumber: item.partNumber } : {}),
+                manufacturerCode: item.manufacturerCode,
+              }
+            : {}),
+          ...(item.natoStockNumber ? { natoStockNumber: item.natoStockNumber } : {}),
         });
+        // 部品番号は identNumber に書くので、製造者のコードが要る。NSN だけで書いた品目の部品番号は書けない
+        if (item.partNumber && !item.manufacturerCode)
+          this.lose(
+            'RequiredItem.partNumber without manufacturerCode (identNumber needs manufacturerCode; the item is written with natoStockNumber only)',
+            `${where}/${key}/${i}`,
+          );
       });
     }
     children.push(...this.admonitions(pre.safety));
@@ -537,10 +550,10 @@ class Converter {
     return {
       path: paths[0]!,
       detail:
-        `${paths.length} prerequisites item(s) have no manufacturerCode or no quantity (${paths.join(', ')}). ` +
+        `${paths.length} prerequisites item(s) have no identifier (natoStockNumber or manufacturerCode) or no quantity (${paths.join(', ')}). ` +
         'S1000D requires an identifier and a quantity for each item, and no value is made up. ' +
         `Leaving the items out would write ${none}, which reads as "nothing is required", so this data module is not built. ` +
-        'Give manufacturerCode and quantity (quantity may be text such as "As required"), or remove the items from prerequisites.',
+        'Give natoStockNumber or manufacturerCode, and quantity (quantity may be text such as "As required"), or remove the items from prerequisites.',
     };
   }
 

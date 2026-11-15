@@ -279,7 +279,24 @@ describe('manualToDrafts: 作業前の要件（Topic.prerequisites）', () => {
         { name: 'ドライバー' },
       ],
       supplies: [{ name: 'ウエス', quantity: '1' }],
-      spares: [{ name: 'ヒューズ', quantity: '2', manufacturerCode: 'K0001' }],
+      spares: [
+        { name: 'ヒューズ', quantity: '2', manufacturerCode: 'K0001' },
+        // NSN だけの品目。部品番号は、製造者のコードが無いので書けない
+        {
+          name: '電球',
+          quantity: 'As required',
+          natoStockNumber: '6240-00-155-8706',
+          partNumber: 'L-1',
+        },
+        // NSN と、部品番号・製造者のコードの両方
+        {
+          name: 'パッキン',
+          quantity: '1',
+          natoStockNumber: '5330001234567',
+          partNumber: 'P-9',
+          manufacturerCode: 'K0001',
+        },
+      ],
       safety: [
         { level: 'warning', title: '感電', text: '指定された場所以外に触れない。' },
         { level: 'caution', text: '扉は重い。' },
@@ -321,6 +338,20 @@ describe('manualToDrafts: 作業前の要件（Topic.prerequisites）', () => {
         },
         { kind: 'spare', title: 'ヒューズ', quantity: '2', manufacturerCode: 'K0001' },
         {
+          kind: 'spare',
+          title: '電球',
+          quantity: 'As required',
+          natoStockNumber: '6240-00-155-8706',
+        },
+        {
+          kind: 'spare',
+          title: 'パッキン',
+          quantity: '1',
+          partNumber: 'P-9',
+          manufacturerCode: 'K0001',
+          natoStockNumber: '5330001234567',
+        },
+        {
           kind: 'admonition',
           level: 'warning',
           children: [
@@ -354,6 +385,11 @@ describe('manualToDrafts: 作業前の要件（Topic.prerequisites）', () => {
       l['DocumentReference.code on a reference to a topic (the data module is the reference)'],
     ).toBe(1);
     expect(l['prerequisites on a topic that is not a procedure or troubleshooting topic']).toBe(1);
+    expect(
+      l[
+        'RequiredItem.partNumber without manufacturerCode (identNumber needs manufacturerCode; the item is written with natoStockNumber only)'
+      ],
+    ).toBe(1);
     // 変換しない Topic への topicRef は、文だけを書く
     const only = convert(['t-start']);
     expect(lost(only)['prerequisites topicRef to a topic that is not converted in this call']).toBe(

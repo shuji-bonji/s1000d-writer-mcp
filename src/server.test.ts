@@ -860,6 +860,28 @@ describe('convert_manual', () => {
     expect(lost).not.toContain('prerequisites item');
   });
 
+  it('NSN だけで示した品目は natoStockNumber として書き、DM を作る', async () => {
+    useSpec(SPEC);
+    const manual = JSON.parse(readFileSync(MANUAL, 'utf8'));
+    const topic = manual.topics.find((t: { prerequisites?: unknown }) => t.prerequisites);
+    topic.prerequisites.supplies = [
+      { name: 'ウエス', quantity: 'As required', natoStockNumber: '7920-00-140-0869' },
+    ];
+    const r = await call(
+      'convert_manual',
+      withBrex({ manualPath: undefined, manual, csdbDirs: [tmp(), LAX] }),
+    );
+    const row = r.data.dataModules.find((d: { sourceId: string }) => d.sourceId === topic.id);
+    expect(row.error).toBeUndefined();
+    expect(row.xml).toMatch(
+      /<supplyDescr>\s*<name>ウエス<\/name>\s*<natoStockNumber natoSupplyClass="7920" natoCodificationBureau="00" natoItemIdentNumberCore="1400869"\/>\s*<reqQuantity>As required<\/reqQuantity>/,
+    );
+    expect(row.xml).not.toContain('<noSupplies');
+    expect(r.data.summary.failedToBuild).toBe(0);
+    expect(r.data.summary.schema.valid).toBe(10);
+    expect(r.data.summary.brex.passed).toBe(10);
+  });
+
   it('write: true で DM・PM を書き、原本を ICN のファイル名でコピーする。台帳を渡し直すと同じ DMC になる', async () => {
     useSpec(SPEC);
     const dir = tmp();

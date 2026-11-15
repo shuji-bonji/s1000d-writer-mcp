@@ -48,7 +48,7 @@ S1000D® のデータモジュールを、LLM が XML を書かずに作るた�
 > - **翻訳はしません。** 文を取り出して戻すだけです。訳すのは LLM か人です。
 > - **図の作成や、制限言語（STE）の判定はしません。** 図は ICN を採番して参照を入れるだけです。
 > - 体験型マニュアルのホットスポットの座標や、`scopeRefs` の一部など、データモジュールで表せないものは `notRepresented` に報告し、黙って捨てません。
-> - `convert_manual` は、`prerequisites` に `manufacturerCode` か `quantity` の無い品目がある Topic のデータモジュールを作りません。`dataModules[]` のその行に `error`（`input-error`。`path` は品目の場所）を返し、ほかのデータモジュールは作ります。S1000D の品目には識別子と数量が要り、品目を落として書くと `noSupplies` になって「要らない」と読めるためです。
+> - `convert_manual` は、`prerequisites` に識別子（`natoStockNumber` か `manufacturerCode`）か `quantity` の無い品目がある Topic のデータモジュールを作りません。`dataModules[]` のその行に `error`（`input-error`。`path` は品目の場所）を返し、ほかのデータモジュールは作ります。S1000D の品目には識別子と数量が要り、品目を落として書くと `noSupplies` になって「要らない」と読めるためです。
 > - ACT・CCT・PCT は作りません。適用性は、下書きの `applic` と既存の適用性リポジトリを前提にします。`build_data_module` の下書きに `applic` が無いときは、組み立てずに `input-error`（`path` は `/applic`）を返します。適用範囲はサーバーが決めないので、少なくとも `applic.displayText` を渡してください（`convert_manual` は、`scopeRefs` の無い Topic に `defaultApplic`、既定では表示文「すべて」を使います）。
 
 ## 設定

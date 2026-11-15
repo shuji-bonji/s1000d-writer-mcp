@@ -1,6 +1,6 @@
 # Changelog
 
-## 未リリース
+## 0.3.0 (2026-11-16)
 
 実在の技術マニュアルを使った確認で見つかった、`convert_manual` の不足を直しました（s1000d-stack の docs/notes/tm-eval-requests.md の W-3）。ツールの入出力の形は変えていません。
 
@@ -13,7 +13,8 @@
   - 行き先が別の DM の先頭以外の手順のときは、`dmRef` の `@referredFragment` でその手順を指します。変換しない Topic への `next` と、行き先の無い `next` は `notRepresented` に件数で返します。
 - **作業前の要件（experiential-manual-model 0.3.0 の `Topic.prerequisites`）を、手順 DM・故障探求 DM の `preliminaryRqmts` に書きます**（W-1）。これまでは置き場所が無く、`preliminaryRqmts` はすべて「なし」でした。
   - `conditions` → 条件（`topicRef` があれば、その Topic の DM への参照を付けた `reqCondDm`）、`personnel` → `reqPersons/personnel`、`references` → `reqTechInfoGroup`（`topicRef` があれば `dmRef`、無ければ題名と番号の `externalPubRef`）、`equipment`・`supplies`・`spares` → `reqSupportEquips`・`reqSupplies`・`reqSpares`、`safety` → `reqSafety/safetyRqmts`。
-  - S1000D の品目は識別子と数量が要ります。`manufacturerCode` か `quantity` の無い品目がある Topic の DM は作らず、応答の `dataModules[]` のその行に `error`（`code: "input-error"`、`path` は品目の場所）を返します（W-10）。ほかの DM は作ります。品目を落として書くと、その区分が `noSupplies`・`noSupportEquips`・`noSpares` になり、「要らない」と読める DM になるためです。検証を通すために値を補うことはしません。数量は「As required」のような文でも構いません。
+  - S1000D の品目は識別子と数量が要ります。識別子（`natoStockNumber` か `manufacturerCode`）か `quantity` の無い品目がある Topic の DM は作らず、応答の `dataModules[]` のその行に `error`（`code: "input-error"`、`path` は品目の場所）を返します（W-10）。ほかの DM は作ります。品目を落として書くと、その区分が `noSupplies`・`noSupportEquips`・`noSpares` になり、「要らない」と読める DM になるためです。検証を通すために値を補うことはしません。数量は「As required」のような文でも構いません。
+  - 品目の NATO 物品番号（experiential-manual-model 0.4.0 の `natoStockNumber`）を、`natoStockNumber` 要素として書きます。部品番号の無い品目も、NSN があれば書けます。`manufacturerCode` もあるときは、`identNumber` と両方を書きます。部品番号（`partNumber`）は `identNumber` に書くので `manufacturerCode` が要ります。NSN だけがある品目の部品番号は書かず、`notRepresented` に返します。
   - 説明・画面の流れの Topic に置いた `prerequisites` と、変換しない Topic への `topicRef` も、`notRepresented` に返します。
 - **画面の手順の文を、Hotspot の名前（`label`）だけから作ります**（W-2）。説明（`description`）は操作の文の後ろに別の文として、図の番号（`callout`）は文の先頭に書きます（「（3）[Exit]を押す。メイン画面に戻る。」）。`label` に名前と説明をまとめて書いていると、文が崩れていました。
 - 注意書きの見出し（`Admonition.title`）を書きます。見出しと本文を 2 つの段落にします。これまでは見出しを落としていました。
@@ -21,7 +22,7 @@
 
 ### 変更
 
-- 依存を `@shuji-bonji/s1000d-core` `^0.9.0`、`@shuji-bonji/experiential-manual-model` `^0.3.0` に上げました。
+- 依存を `@shuji-bonji/s1000d-core` `^0.10.0`、`@shuji-bonji/experiential-manual-model` `^0.4.0` に上げました。
 - 内容を埋め込んだ素材（`Asset.source.data`。model 0.2.0 から `source.path` は任意）は、形式を `mediaType` か data URL の種類から決めます。原本のファイルが無いので、ICN の原本はコピーされません（応答の `assets[].sourceExists` が false になります）。
 - テストの券売機の例（`tests/fixtures/kenbaiki.manual.json`）を、model 0.3.0 の例に差し替えました。
 
