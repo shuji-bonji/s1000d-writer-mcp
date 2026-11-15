@@ -10,7 +10,19 @@
   - 同じ Topic の手順へは `internalRef`、別の Topic の手順・画面へはその DM への `dmRef` を、「次に進む: 」（条件があれば「〈条件〉、次に進む: 」）の段落にして手順の中に置きます。
   - 困ったときの対処（`isolationProcedureEnd`）は、条件の無い飛び先を対処の文の後ろに参照として並べます。
   - 並びのとおりに次の手順へ進むだけの `next`（条件が無く、行き先が次の手順・最初の子・親の次の手順）は、DM の中の並びが表しているので何も書かず、`notRepresented` にも数えません。
-  - `dmRef` は DM を指すだけです。行き先が別の DM の先頭以外の手順のときは、その位置を `notRepresented` に「the step inside another data module that a Step.next points at」として返します。変換しない Topic への `next` と、行き先の無い `next` も件数で返します。
+  - 行き先が別の DM の先頭以外の手順のときは、`dmRef` の `@referredFragment` でその手順を指します。変換しない Topic への `next` と、行き先の無い `next` は `notRepresented` に件数で返します。
+- **作業前の要件（experiential-manual-model 0.3.0 の `Topic.prerequisites`）を、手順 DM・故障探求 DM の `preliminaryRqmts` に書きます**（W-1）。これまでは置き場所が無く、`preliminaryRqmts` はすべて「なし」でした。
+  - `conditions` → 条件（`topicRef` があれば、その Topic の DM への参照を付けた `reqCondDm`）、`personnel` → `reqPersons/personnel`、`references` → `reqTechInfoGroup`（`topicRef` があれば `dmRef`、無ければ題名と番号の `externalPubRef`）、`equipment`・`supplies`・`spares` → `reqSupportEquips`・`reqSupplies`・`reqSpares`、`safety` → `reqSafety/safetyRqmts`。
+  - S1000D の品目は識別子と数量が要ります。`manufacturerCode` か `quantity` の無い品目は書かず、`notRepresented` に件数と場所を返します。検証を通すために値を補うことはしません。
+  - 説明・画面の流れの Topic に置いた `prerequisites` と、変換しない Topic への `topicRef` も、`notRepresented` に返します。
+- **画面の手順の文を、Hotspot の名前（`label`）だけから作ります**（W-2）。説明（`description`）は操作の文の後ろに別の文として、図の番号（`callout`）は文の先頭に書きます（「（3）[Exit]を押す。メイン画面に戻る。」）。`label` に名前と説明をまとめて書いていると、文が崩れていました。
+- 注意書きの見出し（`Admonition.title`）を書きます。見出しと本文を 2 つの段落にします。これまでは見出しを落としていました。
+
+### 変更
+
+- 依存を `@shuji-bonji/s1000d-core` `^0.9.0`、`@shuji-bonji/experiential-manual-model` `^0.3.0` に上げました。
+- 内容を埋め込んだ素材（`Asset.source.data`。model 0.2.0 から `source.path` は任意）は、形式を `mediaType` か data URL の種類から決めます。原本のファイルが無いので、ICN の原本はコピーされません（応答の `assets[].sourceExists` が false になります）。
+- テストの券売機の例（`tests/fixtures/kenbaiki.manual.json`）を、model 0.3.0 の例に差し替えました。
 
 ## 0.2.0 (2026-11-06)
 

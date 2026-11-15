@@ -348,7 +348,8 @@ async function convertManualTool(args: Args) {
   const assetRows = conv.assets.map((a) => {
     const icn = ledger[a.assetId];
     const p = a.sourcePath;
-    const resolved = isAbsolute(p) ? p : base ? resolve(base, p) : undefined;
+    const resolved =
+      p === undefined ? undefined : isAbsolute(p) ? p : base ? resolve(base, p) : undefined;
     const exists = resolved !== undefined && existsSync(resolved) && statSync(resolved).isFile();
     return {
       assetId: a.assetId,

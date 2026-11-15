@@ -826,6 +826,19 @@ describe('convert_manual', () => {
     const lost = r.data.notRepresented.map((n: { what: string }) => n.what).join('\n');
     expect(lost).toContain('Hotspot');
     expect(lost).toContain('scopeRefs');
+    // 作業前の要件（Topic.prerequisites）は、手順 DM の preliminaryRqmts に入る
+    const proced = r.data.dataModules.find(
+      (d: { role: string; fileName: string }) => d.role === 'topic' && /-520A-D_/.test(d.fileName),
+    ).xml as string;
+    expect(proced).toContain('<reqCondDm>');
+    expect(proced).toMatch(/<reqPersons>\s*<personnel numRequired="1">\s*<trade>係員<\/trade>/);
+    expect(proced).toMatch(/<externalPubCode>KB-M-001<\/externalPubCode>/);
+    expect(proced).toMatch(/<supportEquipDescr>\s*<name>保守鍵<\/name>/);
+    expect(proced).toMatch(/<reqSafety>\s*<safetyRqmts>\s*<warning>/);
+    expect(proced).not.toContain('<noSafety');
+    // 識別子の無い品目（ウエス）は書かず、件数で返す
+    expect(proced).toContain('<noSupplies');
+    expect(lost).toContain('prerequisites item without manufacturerCode or quantity');
   });
 
   it('write: true で DM・PM を書き、原本を ICN のファイル名でコピーする。台帳を渡し直すと同じ DMC になる', async () => {

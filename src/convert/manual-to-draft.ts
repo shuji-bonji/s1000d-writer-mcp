@@ -21,7 +21,16 @@
  *
  * Step.next（手順の飛び先）は参照にする: 同じ Topic の手順へは internalRef、別の Topic の手順・画面へは
  * その DM への dmRef。並びのとおりに次の手順へ進むだけの next は、並びが表しているので何も書かない。
- * dmRef は DM を指すだけなので、行き先が別の DM の先頭以外の手順のときは、その位置を `notRepresented` に返す。
+ * 行き先が別の DM の先頭以外の手順のときは、dmRef の `fragment`（`@referredFragment`）でその手順を指す。
+ *
+ * 作業前の要件（`Topic.prerequisites`。procedure / troubleshooting）は、DM の先頭の `requirements` に写す:
+ * conditions → para（topicRef があればその DM への dmRef）、personnel → person、references → document、
+ * equipment / supplies / spares → equipment / supply / spare、safety → admonition。
+ * S1000D の品目は識別子と数量が要るので、manufacturerCode か quantity の無い品目は書かず、`notRepresented` に返す
+ * （値は補わない）。
+ *
+ * 画面の手順の文は、Hotspot の名前（`label`）だけから作る。説明（`description`）は後ろの別の文に、
+ * 図の番号（`callout`）は文の先頭に書く。
  */
 import { extname } from 'node:path';
 import {
@@ -94,8 +103,8 @@ export interface ConvertedDraft {
 export interface ConvertedAsset {
   assetId: string;
   kind: Asset['kind'];
-  /** 原本のパス（`Asset.source.path`。マニュアルからの相対のまま） */
-  sourcePath: string;
+  /** 原本のパス（`Asset.source.path`。マニュアルからの相対のまま）。内容を埋め込んだ素材（`source.data`）には無い */
+  sourcePath?: string;
   /** DOCTYPE の ENTITY / NOTATION に使う形式 */
   format: GraphicFormat;
 }
@@ -192,7 +201,18 @@ export function xmlId(raw: string): string {
 
 interface Phrases {
   join(a: string, b: string): string;
-  hotspot(label: string, action: Hotspot['action'], next?: string, condition?: string): string;
+  /**
+   * 画面の手順の文。`label` は名前だけ。`description`（説明）は操作の文の後ろに別の文として、
+   * `callout`（図の番号）は文の先頭に置く
+   */
+  hotspot(
+    label: string,
+    action: Hotspot['action'],
+    next?: string,
+    condition?: string,
+    description?: string,
+    callout?: string,
+  ): string;
   /** 手順の飛び先の前に置く文。この文の後ろに参照が並ぶ */
   goTo(condition?: string): string;
   all: string;
@@ -203,7 +223,7 @@ interface Phrases {
 const PHRASES: Record<'ja' | 'en', Phrases> = {
   ja: {
     join: (a, b) => `${a}${b}`,
-    hotspot: (label, action, next, condition) => {
+    hotspot: (label, action, next, condition, description, callout) => {
       const verb =
         action === 'press'
           ? '押す'
@@ -213,7 +233,12 @@ const PHRASES: Record<'ja' | 'en', Phrases> = {
               ? '確認する'
               : '操作する';
       const go = next ? `${condition ? `${condition}、` : ''}「${next}」に進む。` : '';
-      return `${label}を${verb}。${go}`;
+      const desc = description
+        ? /[。．.!?！？]$/.test(description)
+          ? description
+          : `${description}。`
+        : '';
+      return `${callout ? `（${callout}）` : ''}${label}を${verb}。${desc}${go}`;
     },
     goTo: (condition) => `${condition ? `${condition}、` : ''}次に進む: `,
     all: 'すべて',
@@ -222,7 +247,7 @@ const PHRASES: Record<'ja' | 'en', Phrases> = {
   },
   en: {
     join: (a, b) => `${a} ${b}`,
-    hotspot: (label, action, next, condition) => {
+    hotspot: (label, action, next, condition, description, callout) => {
       const verb =
         action === 'press'
           ? 'Press'
@@ -232,7 +257,10 @@ const PHRASES: Record<'ja' | 'en', Phrases> = {
               ? 'Read'
               : 'Operate';
       const go = next ? ` ${condition ? `If ${condition}, go` : 'Go'} to "${next}".` : '';
-      return `${verb} ${label}.${go}`;
+      const desc = description
+        ? ` ${/[.!?]$/.test(description) ? description : `${description}.`}`
+        : '';
+      return `${callout ? `(${callout}) ` : ''}${verb} ${label}.${desc}${go}`;
     },
     goTo: (condition) => `${condition ? `If ${condition}, go` : 'Go'} to: `,
     all: 'All',
@@ -253,13 +281,21 @@ const KNOWN_FORMATS: Record<string, GraphicFormat> = {
 };
 
 export function formatOfAsset(asset: Asset): { format: GraphicFormat; placeholder: boolean } {
-  const ext = extname(asset.source.path).slice(1).toLowerCase();
+  // 形式は、ファイル名の拡張子から決める。内容を埋め込んだ素材（source.data）は、mediaType か data URL の種類から決める
+  const media = asset.source.mediaType ?? /^data:([^;,]+)/.exec(asset.source.data ?? '')?.[1] ?? '';
+  const fromMedia = /^[a-z]+\/([a-z0-9]+)/.exec(media.toLowerCase())?.[1] ?? '';
+  const ext =
+    asset.source.path !== undefined
+      ? extname(asset.source.path).slice(1).toLowerCase()
+      : fromMedia === 'svg' || media.toLowerCase().startsWith('image/svg')
+        ? 'svg'
+        : fromMedia;
   const known = KNOWN_FORMATS[ext];
   if (known) return { format: known, placeholder: false };
   if (!/^[a-z0-9]{1,8}$/.test(ext)) {
     throw new DraftInputError(
       `/assets/${asset.id}`,
-      `cannot tell the file format of "${asset.source.path}": it has no usable extension; give assetFormats["${asset.id}"]`,
+      `cannot tell the file format of "${asset.source.path ?? '(embedded data)'}": it has no usable extension or media type; give assetFormats["${asset.id}"]`,
     );
   }
   return {
@@ -383,8 +419,101 @@ class Converter {
     };
   }
 
+  /** 注意書き。見出し（title）があれば、見出しと本文を 2 つの段落にする（S1000D の警告・注意に見出しの要素は無い） */
   private admonitions(list: Admonition[] | undefined): DraftNode[] {
-    return (list ?? []).map((a) => ({ kind: 'admonition', level: a.level, text: a.text }));
+    return (list ?? []).map((a) =>
+      a.title
+        ? {
+            kind: 'admonition' as const,
+            level: a.level,
+            children: [
+              { kind: 'para' as const, text: a.title },
+              { kind: 'para' as const, text: a.text },
+            ],
+          }
+        : { kind: 'admonition' as const, level: a.level, text: a.text },
+    );
+  }
+
+  // ---- 作業前の要件（Topic.prerequisites） ----
+
+  /** 作業前の要件を、DM の先頭に置く `requirements` の節点にする。写すものが無ければ undefined */
+  private prerequisites(t: Topic): DraftNode | undefined {
+    const pre = t.prerequisites;
+    if (!pre) return undefined;
+    const where = `/topics/${t.id}/prerequisites`;
+    const children: DraftNode[] = [];
+    const topicRef = (id: string, w: string): DraftRef | undefined => {
+      const dm = this.dmOf.get(id);
+      if (!dm) {
+        this.lose('prerequisites topicRef to a topic that is not converted in this call', w);
+        return undefined;
+      }
+      const title = this.manual.topics.find((x) => x.id === id)?.title;
+      return {
+        kind: 'dmRef',
+        target: formatDmc(dm),
+        title: this.manual.title,
+        ...(title ? { infoName: title } : {}),
+      };
+    };
+    (pre.conditions ?? []).forEach((c, i) => {
+      const ref = c.topicRef ? topicRef(c.topicRef, `${where}/conditions/${i}`) : undefined;
+      children.push({ kind: 'para', text: c.text, ...(ref ? { refs: [ref] } : {}) });
+    });
+    for (const p of pre.personnel ?? [])
+      children.push({
+        kind: 'person',
+        text: p.role,
+        ...(p.count !== undefined ? { count: p.count } : {}),
+      });
+    (pre.references ?? []).forEach((r, i) => {
+      const w = `${where}/references/${i}`;
+      const ref = r.topicRef ? topicRef(r.topicRef, w) : undefined;
+      if (ref) {
+        // このマニュアルの中の Topic への参照。題名と番号は、参照先の DM の題名に置き換わる
+        if (r.code)
+          this.lose(
+            'DocumentReference.code on a reference to a topic (the data module is the reference)',
+            w,
+          );
+        children.push({ kind: 'document', refs: [ref] });
+      } else {
+        children.push({ kind: 'document', title: r.title, ...(r.code ? { text: r.code } : {}) });
+      }
+    });
+    for (const [key, kind] of [
+      ['equipment', 'equipment'],
+      ['supplies', 'supply'],
+      ['spares', 'spare'],
+    ] as const) {
+      (pre[key] ?? []).forEach((item, i) => {
+        if (!item.manufacturerCode || !item.quantity) {
+          this.lose(
+            'prerequisites item without manufacturerCode or quantity (S1000D requires an identifier and a quantity for each item; none is made up)',
+            `${where}/${key}/${i}`,
+          );
+          return;
+        }
+        children.push({
+          kind,
+          title: item.name,
+          ...(item.note ? { text: item.note } : {}),
+          quantity: item.quantity,
+          ...(item.unit ? { unit: item.unit } : {}),
+          ...(item.partNumber ? { partNumber: item.partNumber } : {}),
+          manufacturerCode: item.manufacturerCode,
+        });
+      });
+    }
+    children.push(...this.admonitions(pre.safety));
+    return children.length > 0 ? { kind: 'requirements', children } : undefined;
+  }
+
+  /** `requirements`（あれば）を本体の前に置く */
+  private withPrerequisites(t: Topic, body: DraftNode[]): DraftNode[] {
+    const req = this.prerequisites(t);
+    return req ? [req, ...body] : body;
   }
 
   /** 素材 1 つを図の節点にする（image は graphic、それ以外は multimedia） */
@@ -502,12 +631,8 @@ class Converter {
           ...(tr.label ? { title: tr.label } : {}),
         };
       const ref = dmRef(step.topicId);
-      if (ref && !step.first)
-        this.lose(
-          'the step inside another data module that a Step.next points at (the dmRef points at the data module)',
-          where,
-        );
-      return ref;
+      // 先頭の手順なら DM への参照で足りる。それ以外は、DM の中の手順を fragment で指す
+      return ref && !step.first ? { ...ref, fragment: xmlId(tr.to) } : ref;
     }
     const screenTopic = this.screenAt.get(tr.to);
     if (screenTopic) return dmRef(`${screenTopic}/${tr.to}`);
@@ -633,6 +758,8 @@ class Converter {
           h.action,
           target ? this.screenLabel(target) : undefined,
           h.transition?.condition,
+          h.description,
+          h.callout,
         ),
       });
     }
@@ -802,14 +929,31 @@ class Converter {
       } else if (t.kind === 'description') {
         draft = this.base(p.sourceId, 'descript', t.title, t.scopeRefs, this.description(t));
       } else if (t.kind === 'procedure') {
-        draft = this.base(p.sourceId, 'proced', t.title, t.scopeRefs, this.procedure(t));
+        draft = this.base(
+          p.sourceId,
+          'proced',
+          t.title,
+          t.scopeRefs,
+          this.withPrerequisites(t, this.procedure(t)),
+        );
         if (t.summary) this.lose('Topic.summary of a non-description topic', `/topics/${t.id}`);
       } else {
-        draft = this.base(p.sourceId, 'fault', t.title, t.scopeRefs, this.faultSteps(t));
+        draft = this.base(
+          p.sourceId,
+          'fault',
+          t.title,
+          t.scopeRefs,
+          this.withPrerequisites(t, this.faultSteps(t)),
+        );
         if (t.summary) this.lose('Topic.summary of a non-description topic', `/topics/${t.id}`);
       }
       if (t.kind === 'screenFlow' && t.summary)
         this.lose('Topic.summary of a non-description topic', `/topics/${t.id}`);
+      if (t.prerequisites && (t.kind === 'screenFlow' || t.kind === 'description'))
+        this.lose(
+          'prerequisites on a topic that is not a procedure or troubleshooting topic',
+          `/topics/${t.id}/prerequisites`,
+        );
       this.drafts.push({
         draft,
         role: 'topic',

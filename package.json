@@ -58,8 +58,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
-    "@shuji-bonji/experiential-manual-model": "^0.1.0",
-    "@shuji-bonji/s1000d-core": "^0.8.2",
+    "@shuji-bonji/experiential-manual-model": "^0.3.0",
+    "@shuji-bonji/s1000d-core": "^0.9.0",
     "libxml2-wasm": "^0.7.2"
   },
   "devDependencies": {
