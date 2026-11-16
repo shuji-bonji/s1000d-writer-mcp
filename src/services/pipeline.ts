@@ -307,7 +307,14 @@ export class OverlayCsdbSource implements CsdbSource {
 // ---------------------------------------------------------------------------
 // 書き込み
 
-export type WriteSkipReason = 'no-csdb-dir' | 'schema-invalid' | 'write-conflict';
+export type WriteSkipReason =
+  | 'no-csdb-dir'
+  | 'schema-invalid'
+  | 'write-conflict'
+  /** edit_data_module: 編集の前には無かった XSD のエラーが出た */
+  | 'new-schema-errors'
+  /** edit_data_module: 取り除いた id を、CSDB のほかのオブジェクトの dmRef が指している */
+  | 'referenced-from-other-objects';
 
 export interface WriteOutcome {
   written?: string;

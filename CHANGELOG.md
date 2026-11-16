@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 (2026-11-17)
+
+依存の `@shuji-bonji/s1000d-core` を `^0.13.0` に上げ、`edit_data_module` を足しました。ほかの 6 つのツールの動きは変わりません。
+
+### 追加
+
+- **`edit_data_module` を足しました。** 既にある手順・説明のデータモジュールに、節点を足す（`insert`）・取り除く（`remove`）・移す（`move`）編集を行います。core の `editContent` を呼び、結果を検証し直して返します。
+  - 場所は `location.path`（s1000d-reader-mcp の `read_data_module` が返すもの）で指します。複数の編集を渡すときも、すべて編集の前の文書の場所で書きます。足す節点は下書きの節点（`step`・`para`・`admonition`・`listItem`）で、XML は受け取りません。
+  - 1 つでも断る理由があれば何も適用せず、`refusals[]` に理由（`id-referenced`・`not-allowed-here`・`unsupported-node`・`released-issue` など）と場所を返します。
+  - 元の文字列の編集した範囲だけを書き換えます。ほかは 1 文字も変わりません。
+  - 版（`issueInfo`）も変更の印（`changeType`・`changeMark`・`reasonForUpdate`）も変えません。発行済みの版（`inWork` が `00`）は、`allowReleasedIssue: true` が無ければ断ります。
+  - **編集の前には無かった XSD のエラーを `newSchemaErrors[]` に返し、その結果は `write: true` でも書き込みません**（`writeSkipped.reason` は `new-schema-errors`）。`allowInvalid` は、元から XSD に合わない文書を書くときだけ効きます。
+  - 取り除いた `id` を、CSDB のほかのデータモジュール・PM の `dmRef/@referredFragment` が指しているときは、`referencedFromOtherObjects[]` に返して書き込みません（`referenced-from-other-objects`）。
+
 ## 0.4.0 (2026-11-17)
 
 依存の `@shuji-bonji/s1000d-core` を `^0.12.0` に上げ、`apply_fixes` の入力に `position` を足しました。

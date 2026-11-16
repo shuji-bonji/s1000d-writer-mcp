@@ -305,6 +305,68 @@ export const tools: ToolDefinition[] = [
     },
   },
   {
+    name: 'edit_data_module',
+    description:
+      'Change the structure of an EXISTING procedural or descriptive data module: insert a node, remove a node, move a node. Places are location.path values of the document as it is now (s1000d-reader-mcp read_data_module returns them); with several edits, every place still refers to the document before any edit. A node to insert is a structured draft node (step / para / admonition / listItem), never XML. All edits are applied or none: refusals[] gives the reason per edit (for example id-referenced, not-allowed-here, unsupported-node, released-issue). Only the edited ranges of the original text are rewritten; the rest stays character for character, and a moved element keeps its content unchanged. Elements that can be removed or moved: proceduralStep, para, warning, caution, note, listItem. This tool does NOT change the issue information or add change markup (changeType, changeMark, reasonForUpdate): a released issue (inWork "00") is refused unless allowReleasedIssue is true. The result is verified again; XSD errors that the edits introduced come back in newSchemaErrors[] and such a result is never written. Returns applied, xml, changes[], refusals[], newSchemaErrors[], referencedFromOtherObjects[], verification, fixes[]. Writes only when write is true (a path is overwritten in place).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: pathParam,
+        xml: xmlParam,
+        csdbDirs: csdbDirsParam,
+        edits: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              op: { type: 'string', enum: ['insert', 'remove', 'move'] },
+              at: {
+                type: 'string',
+                description: 'remove / move: location.path of the node to remove or move.',
+              },
+              to: {
+                type: 'string',
+                description:
+                  'insert / move: location.path of the reference node (the node beside or inside which the node goes).',
+              },
+              position: {
+                type: 'string',
+                enum: ['before', 'after', 'first-child', 'last-child'],
+                description:
+                  'insert / move: before / after the reference node, or as the first / last child of it. The XSD fixes the order of children (in a proceduralStep: warnings and cautions, then paragraphs, then nested steps); a wrong order comes back in newSchemaErrors[].',
+              },
+              node: {
+                ...ref('DraftNode'),
+                description:
+                  'insert: the node to add (kind: step, para, admonition or listItem). An id that already exists in the document is refused; no id is made up.',
+              },
+            },
+            required: ['op'],
+            additionalProperties: false,
+          },
+        },
+        allowReleasedIssue: {
+          type: 'boolean',
+          description:
+            'Edit a released issue (issueInfo/@inWork "00") in place, without changing the issue information or adding change markup. Default false. Set it only when the user has said so: the result does not follow the S1000D rules for updating a released data module.',
+        },
+        product: productParam,
+        write: writeParam,
+        overwrite: overwriteParam,
+        allowInvalid: {
+          type: 'boolean',
+          description:
+            'Write even though the document was ALREADY invalid against the XSD before the edits. It does not allow writing a result with new XSD errors.',
+        },
+        maxFixes: maxFixesParam,
+      },
+      required: ['edits'],
+      additionalProperties: false,
+      $defs: DEFS,
+    },
+  },
+  {
     name: 'create_comment',
     description:
       'Build a comment data module (comment.xsd): a remark about data modules, publication modules, DMLs or DDNs, with the type (q / i / r), the priority code (cp01–cp99), paragraphs, the originator and the sender. The enumerations are written as given and not interpreted. The sequence number defaults to the next free one in the CSDB. The XML is verified (comment.xsd, BREX). Returns xml, fileName, commentCode, verification, fixes[]. Writes only when write is true.',

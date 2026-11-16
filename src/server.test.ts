@@ -140,7 +140,7 @@ describe('server', () => {
     expect(text).toContain('S1000D_SPEC_DIR');
     expect(text).toContain('input-error');
   });
-  it('6 ツールがすべて登録されている', async () => {
+  it('7 ツールがすべて登録されている', async () => {
     const listed = (await client.listTools()).tools.map((t) => t.name).sort();
     expect(listed).toEqual(
       [
@@ -149,6 +149,7 @@ describe('server', () => {
         'build_data_module',
         'convert_manual',
         'create_comment',
+        'edit_data_module',
         'extract_segments',
       ].sort(),
     );
@@ -486,6 +487,159 @@ describe('build_data_module', () => {
     expect(r.data.verification.schema.state).toBe('valid');
     expect(r.data.verification.target.pmCode).toBeDefined();
     expect(r.data.verification.brex.layers).toBe(2); // PM も brexDmRef から連鎖をたどる
+  });
+});
+
+describe('edit_data_module', () => {
+  const PROCED_DM = join(STRICT, 'DMC-KENBAIKI-A-10-20-00-00A-520A-A_001-00_JA-JP.XML');
+  const LEVELLED = '/dmodule/content/description/levelledPara';
+  const MAIN = '/dmodule/content/procedure/mainProcedure';
+
+  it('段落を足す。足した行のほかは 1 文字も変わらず、検証し直した結果を返す。write が無ければ書かない', async () => {
+    useSpec(SPEC);
+    const xml = readFileSync(DESCRIPT_DM, 'utf8');
+    const r = await call('edit_data_module', {
+      path: DESCRIPT_DM,
+      csdbDirs: [STRICT],
+      edits: [
+        {
+          op: 'insert',
+          to: `${LEVELLED}/para`,
+          position: 'after',
+          node: { kind: 'para', text: 'ボタンは左から順に並ぶ。' },
+        },
+      ],
+    });
+    expect(r.isError).toBe(false);
+    expect(r.data.applied).toBe(true);
+    expect(r.data.refusals).toEqual([]);
+    expect(r.data.changes).toEqual([
+      expect.objectContaining({ index: 0, op: 'insert', position: 'after', element: 'para' }),
+    ]);
+    const line = '        <para>ボタンは左から順に並ぶ。</para>\n';
+    expect(r.data.xml).toContain(line);
+    expect(r.data.xml.replace(line, '')).toBe(xml);
+    expect(r.data.newSchemaErrors).toEqual([]);
+    expect(r.data.verification.schema.state).toBe('valid');
+    expect(r.data.written).toEqual([]);
+    expect(readFileSync(DESCRIPT_DM, 'utf8')).toBe(xml);
+    expect(r.data._notes.join(' ')).toContain('change markup');
+  });
+
+  it('1 つでも断る理由があれば何も適用しない。refusals に理由と場所を返す', async () => {
+    useSpec(SPEC);
+    const r = await call('edit_data_module', {
+      path: DESCRIPT_DM,
+      csdbDirs: [STRICT],
+      edits: [
+        { op: 'remove', at: `${LEVELLED}/para` },
+        { op: 'remove', at: `${LEVELLED}/figure` },
+      ],
+    });
+    expect(r.isError).toBe(false);
+    expect(r.data.applied).toBe(false);
+    expect(r.data.xml).toBe(readFileSync(DESCRIPT_DM, 'utf8'));
+    expect(r.data.refusals).toEqual([
+      expect.objectContaining({ index: 1, reason: 'unsupported-node' }),
+    ]);
+  });
+
+  it('発行済みの版（inWork 00）は断る。allowReleasedIssue: true で適用し、版は変えない', async () => {
+    useSpec(SPEC);
+    const edits = [
+      {
+        op: 'move',
+        at: `${MAIN}/proceduralStep[3]`,
+        to: `${MAIN}/proceduralStep[2]`,
+        position: 'before',
+      },
+    ];
+    const refused = await call('edit_data_module', { path: PROCED_DM, csdbDirs: [STRICT], edits });
+    expect(refused.data.applied).toBe(false);
+    expect(refused.data.refusals).toEqual([expect.objectContaining({ reason: 'released-issue' })]);
+    expect(refused.data._notes.join(' ')).toContain('allowReleasedIssue');
+
+    const ok = await call('edit_data_module', {
+      path: PROCED_DM,
+      csdbDirs: [STRICT],
+      edits,
+      allowReleasedIssue: true,
+    });
+    expect(ok.data.applied).toBe(true);
+    const xml = readFileSync(PROCED_DM, 'utf8');
+    expect(ok.data.xml.split('\n').sort()).toEqual(xml.split('\n').sort());
+    expect(ok.data.xml.indexOf('保守モードに入る')).toBeLessThan(
+      ok.data.xml.indexOf('雨よけのカバー'),
+    );
+    expect(ok.data.xml).toContain('<issueInfo issueNumber="001" inWork="00"/>');
+  });
+
+  it('編集で XSD のエラーが増えたら、write: true でも書かない（newSchemaErrors と writeSkipped）', async () => {
+    useSpec(SPEC_STRICT); // description に para が 1 つ以上要る自作の XSD
+    const dir = tmp();
+    const file = join(dir, 'DMC-KENBAIKI-A-10-20-00-00A-040A-D_002-01_JA-JP.XML');
+    const original = readFileSync(DESCRIPT_DM, 'utf8').replace(
+      /<levelledPara>[\s\S]*<\/levelledPara>/,
+      '<para>ただ 1 つの段落。</para>',
+    );
+    writeFileSync(file, original);
+    const r = await call('edit_data_module', {
+      path: file,
+      csdbDirs: [STRICT],
+      edits: [{ op: 'remove', at: '/dmodule/content/description/para' }],
+      write: true,
+    });
+    expect(r.data.applied).toBe(true);
+    expect(r.data.newSchemaErrors).toHaveLength(1);
+    expect(r.data.newSchemaErrors[0].message).toContain('description');
+    expect(r.data.written).toEqual([]);
+    expect(r.data.writeSkipped.reason).toBe('new-schema-errors');
+    expect(readFileSync(file, 'utf8')).toBe(original);
+  });
+
+  it('取り除いた id をほかの DM の dmRef が指していれば、知らせて書かない。指していなければ path に上書きする', async () => {
+    useSpec(SPEC);
+    const dir = tmp();
+    for (const f of readdirSync(STRICT)) copyFileSync(join(STRICT, f), join(dir, f));
+    const file = join(dir, 'DMC-KENBAIKI-A-10-20-00-00A-520A-A_001-00_JA-JP.XML');
+    const withId = readFileSync(file, 'utf8').replace(
+      '<proceduralStep><para>保守モードに入る。',
+      '<proceduralStep id="stp-0009"><para>保守モードに入る。',
+    );
+    writeFileSync(file, withId);
+    const args = {
+      path: file,
+      csdbDirs: [dir],
+      edits: [{ op: 'remove', at: `${MAIN}/proceduralStep[3]` }],
+      allowReleasedIssue: true,
+      write: true,
+    };
+
+    const other = join(dir, 'DMC-KENBAIKI-A-10-20-00-00A-040A-D_002-01_JA-JP.XML');
+    const otherXml = readFileSync(other, 'utf8');
+    writeFileSync(
+      other,
+      otherXml.replace(
+        '2 つのボタンがある。</para>',
+        '2 つのボタンがある。<dmRef referredFragment="stp-0009"><dmRefIdent><dmCode modelIdentCode="KENBAIKI" systemDiffCode="A" systemCode="10" subSystemCode="2" subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="520" infoCodeVariant="A" itemLocationCode="A"/></dmRefIdent></dmRef></para>',
+      ),
+    );
+    clearCaches();
+    const blocked = await call('edit_data_module', args);
+    expect(blocked.data.applied).toBe(true);
+    expect(blocked.data.referencedFromOtherObjects).toEqual([
+      expect.objectContaining({ path: other, fragment: 'stp-0009' }),
+    ]);
+    expect(blocked.data.writeSkipped.reason).toBe('referenced-from-other-objects');
+    expect(readFileSync(file, 'utf8')).toBe(withId);
+
+    writeFileSync(other, otherXml);
+    clearCaches();
+    const written = await call('edit_data_module', args);
+    expect(written.data.referencedFromOtherObjects).toEqual([]);
+    expect(written.data.written).toEqual([file]);
+    expect(readFileSync(file, 'utf8')).toBe(written.data.xml);
+    expect(written.data.xml).not.toContain('保守モードに入る');
   });
 });
 

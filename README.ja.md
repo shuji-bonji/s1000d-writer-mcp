@@ -15,6 +15,7 @@ S1000D® のデータモジュールを、LLM が XML を書かずに作るた�
 | `build_data_module` | 下書き 1 件（説明・手順・プロセス・故障探求・PM）と採番の規則から、データモジュールを組み立てます。DMC・ICN・版は台帳（`ledger`）と CSDB から決まり、同じ `sourceId` には同じ DMC が付きます。組み立てたあとに XSD・BREX・参照を検証し、`exact` の修正だけを最大 `maxFixRounds` 回まで自動で適用します。残った修正は `fixes[]` に候補付きで返します |
 | `convert_manual` | 体験型マニュアル（[`@shuji-bonji/experiential-manual-model`](https://www.npmjs.com/package/@shuji-bonji/experiential-manual-model)）を、Topic ごとのデータモジュールとパブリケーションモジュールに変換して組み立てます。説明・手順・故障探求のほか、画面遷移はプロセス 1 件と画面ごとの手順にします。DM・PM・ICN の相互の参照は、CSDB に今回作った DM と原本のある ICN を重ねた上で解決します。変換で表せなかったものは `notRepresented` に件数で返します |
 | `apply_fixes` | `fixes[]` で返した候補の中から選んだ修正を適用します。選択は候補の写しでなければならず、候補の外の値や、範囲に合わない値は理由付きで `rejected` にします。適用後に再検証します |
+| `edit_data_module` | 既にある手順・説明のデータモジュールに、節点を足す・取り除く・移す編集を行います。場所は `location.path` で指し、足す節点は下書きの節点（`step`・`para`・`admonition`・`listItem`）で渡します。元の文字列の編集した範囲だけを書き換え、ほかは 1 文字も変えません。版と変更の印（`changeType` など）は変えないので、発行済みの版（`inWork` が `00`）は `allowReleasedIssue: true` が無ければ断ります。編集で XSD のエラーが増えた結果は書き込みません |
 | `create_comment` | コメント DM（`comment`）を組み立てて検証します。連番は CSDB の次の番号です |
 | `extract_segments` | データモジュールから、人が読む文（題名・段落・手順・警告・表のセル・図の題）を、翻訳用に取り出します。インライン要素は `{1}` `{2}` の記号に置き換え、`skeletonHash` を返します |
 | `apply_segments` | 訳した文を元のデータモジュールに戻します。DMC は同じで、言語だけが変わります。取り出したあとにデータモジュールが変わっていれば `skeleton-mismatch` で止まります |
@@ -41,7 +42,7 @@ S1000D® のデータモジュールを、LLM が XML を書かずに作るた�
 ## できないこと
 
 > [!WARNING]
-> - **LLM が書いた XML は受け取りません。** 組み立てるのは下書きからだけです。既存の XML を渡せるのは `apply_fixes` / `extract_segments` / `apply_segments` で、これらは文書の構造を変えません。
+> - **LLM が書いた XML は受け取りません。** 組み立てるのは下書きからだけです。既存の XML を渡せるのは `apply_fixes` / `edit_data_module` / `extract_segments` / `apply_segments` です。構造を変えるのは `edit_data_module` だけで、足す中身は XML ではなく下書きの節点で渡します。
 > - **候補の外の値では直しません。** 値を自由に書き込む入口はありません。
 > - **検証を省きません。** 組み立てた XML は必ず検証して返します。
 > - **S1000D への準拠は判定せず、違反の重大度も解釈しません。** 違反の中身は `s1000d-verify-mcp`、BREX のルールの説明は `s1000d-brex-mcp` で読んでください。

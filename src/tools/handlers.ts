@@ -13,16 +13,22 @@ import {
   applySegments,
   buildComment,
   buildDataModule,
+  defaultXmlEngine,
+  editContent,
   extractSegments,
   formatCommentCode,
   formatDmc,
   formatDmcFileName,
   formatPmc,
   readDataModuleInfo,
+  readDmRef,
+  sameDmc,
   type Allocation,
   type BuildOptions,
   type BuildResult,
   type CommentInput,
+  type ContentEdit,
+  type DmCode,
   type DraftDataModule,
   type Fix,
   type FixCandidate,
@@ -30,6 +36,7 @@ import {
   type IssuePolicy,
   type Language,
   type NodeLocation,
+  type SchemaValidationError,
   type Product,
   type SegmentCategory,
   type VerificationStatus,
@@ -56,6 +63,7 @@ import {
   xsdFor,
   type AppliedFix,
   type FixSummary,
+  type PipelineContext,
   type WriteOutcome,
 } from '../services/pipeline.js';
 
@@ -676,6 +684,216 @@ async function applyFixesTool(args: Args) {
 }
 
 // ---------------------------------------------------------------------------
+// edit_data_module
+
+/** 編集の前には無かった XSD のエラー（文章ごとに数え、増えた分だけ返す。行番号は編集でずれるので比べない） */
+function newSchemaErrors(
+  before: SchemaValidationError[],
+  after: SchemaValidationError[],
+): SchemaValidationError[] {
+  const seen = new Map<string, number>();
+  for (const e of before) seen.set(e.message, (seen.get(e.message) ?? 0) + 1);
+  const out: SchemaValidationError[] = [];
+  for (const e of after) {
+    const left = seen.get(e.message) ?? 0;
+    if (left > 0) seen.set(e.message, left - 1);
+    else out.push(e);
+  }
+  return out;
+}
+
+const idsIn = (xml: string): Set<string> =>
+  new Set([...xml.matchAll(/\sid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]!));
+
+/** 編集で無くなった id を、CSDB のほかの DM が `dmRef/@referredFragment` で指していないか */
+function referencesFromOtherObjects(
+  pc: PipelineContext,
+  dmCode: DmCode | undefined,
+  removedIds: string[],
+  selfPath: string | undefined,
+): Array<{ path: string; fragment: string; location: NodeLocation }> {
+  const out: Array<{ path: string; fragment: string; location: NodeLocation }> = [];
+  if (!pc.csdb || !dmCode || removedIds.length === 0) return out;
+  const self = selfPath ? resolve(selfPath) : undefined;
+  for (const object of pc.csdb.objects) {
+    if (object.kind !== 'dm' && object.kind !== 'pm') continue;
+    if (self && resolve(object.path) === self) continue;
+    let text: string;
+    try {
+      text = pc.csdb.read(object);
+    } catch {
+      continue;
+    }
+    if (!removedIds.some((id) => text.includes(id))) continue;
+    let doc;
+    try {
+      doc = defaultXmlEngine.parse(text).document;
+    } catch {
+      continue;
+    }
+    for (const node of defaultXmlEngine.selectNodes('//dmRef[@referredFragment]', doc)) {
+      const el = node as unknown as Parameters<typeof readDmRef>[0];
+      const fragment = el.getAttribute('referredFragment') ?? '';
+      if (!removedIds.includes(fragment)) continue;
+      const ref = readDmRef(el);
+      if (!ref.ok || !sameDmc(ref.value.dmCode, dmCode)) continue;
+      const line = (node as unknown as { lineNumber?: number }).lineNumber;
+      out.push({
+        path: object.path,
+        fragment,
+        location: {
+          path: '//dmRef[@referredFragment="' + fragment + '"]',
+          ...(line ? { line } : {}),
+        },
+      });
+    }
+  }
+  return out;
+}
+
+async function editDataModuleTool(args: Args) {
+  const path = str(args.path);
+  const xml = loadXml({ path, xml: str(args.xml) }, LIMITS.maxInlineXmlBytes);
+  const ctx: ContextOptions = { extraDirs: strArray(args.csdbDirs) };
+  const pc = makePipelineContext(ctx, { product: productArg(args.product) });
+  const edits = (args.edits as ContentEdit[]) ?? [];
+  if (edits.length === 0) throw new Error('"edits" must have at least one item');
+  const write = args.write === true;
+  const maxFixes = int(args.maxFixes, LIMITS.defaultMaxFixes, 1, LIMITS.maxMaxFixes);
+
+  const before = await verifyWithFixes(xml, pc, path);
+  const edited = editContent(xml, edits, {
+    allowReleasedIssue: args.allowReleasedIssue === true,
+    xsd: xsdFor(before.result),
+  });
+
+  if (!edited.applied) {
+    return {
+      applied: false,
+      xml,
+      changes: [],
+      refusals: edited.refusals,
+      newSchemaErrors: [],
+      referencedFromOtherObjects: [],
+      verification: before.result.status,
+      ...summarizeFixes(before, maxFixes),
+      written: [],
+      _notes: [
+        'No edit was applied (all or nothing). refusals[] gives the reason and the place of each edit that was refused; "verification" and fixes[] describe the document as it was given.',
+        ...(edited.refusals.some((r) => r.reason === 'released-issue')
+          ? [
+              'The document is a released issue (inWork "00"). This tool changes neither the issue information nor change markup; ask the user before passing allowReleasedIssue: true.',
+            ]
+          : []),
+        ...edited.notes,
+        ...STANDARD_NOTES,
+        ...configNotes(ctx),
+      ],
+    };
+  }
+
+  const after = await verifyWithFixes(edited.xml, pc, path);
+  const added = newSchemaErrors(before.result.schema.errors, after.result.schema.errors);
+  const removedIds = [...idsIn(xml)].filter((id) => !idsIn(edited.xml).has(id));
+  const info = (() => {
+    try {
+      return readDataModuleInfo(edited.xml).identAndStatus;
+    } catch {
+      return undefined;
+    }
+  })();
+  const referrers = referencesFromOtherObjects(pc, info?.dmCode, removedIds, path);
+
+  let outcome: WriteOutcome | undefined;
+  if (write) {
+    if (added.length > 0) {
+      outcome = {
+        skipped: {
+          reason: 'new-schema-errors',
+          detail: `The edits add ${added.length} XSD error(s) that the document did not have (newSchemaErrors[]); nothing was written. Change the position or the edits and call again.`,
+        },
+      };
+    } else if (referrers.length > 0) {
+      outcome = {
+        skipped: {
+          reason: 'referenced-from-other-objects',
+          detail: `${referrers.length} dmRef(s) in other CSDB objects point at an id that the edits remove (referencedFromOtherObjects[]); nothing was written. Change those references first.`,
+        },
+      };
+    } else if (path) {
+      if (after.result.status.schema.state === 'invalid' && args.allowInvalid !== true) {
+        outcome = {
+          skipped: {
+            reason: 'schema-invalid',
+            detail:
+              'The document was already invalid against the XSD and still is; the file was not changed. Pass allowInvalid: true to write it anyway.',
+          },
+        };
+      } else {
+        writeFileSync(path, edited.xml);
+        outcome = { written: path };
+      }
+    } else {
+      const name = info
+        ? formatDmcFileName({
+            dmCode: info.dmCode,
+            issueInfo: info.issueInfo,
+            language: info.language,
+            extension: 'XML',
+          })
+        : undefined;
+      outcome = name
+        ? tryWriteText(writableSource(ctx), name, edited.xml, {
+            overwrite: args.overwrite === true,
+            allowInvalid: args.allowInvalid === true,
+            verification: after.result.status,
+          })
+        : {
+            skipped: {
+              reason: 'no-csdb-dir',
+              detail: 'The file name could not be derived from the XML; pass path instead.',
+            },
+          };
+    }
+  }
+
+  const summary = summarizeFixes(after, maxFixes);
+  return {
+    applied: true,
+    xml: edited.xml,
+    changes: edited.changes,
+    refusals: [],
+    newSchemaErrors: added,
+    referencedFromOtherObjects: referrers,
+    verification: after.result.status,
+    ...summary,
+    written: outcome?.written ? [outcome.written] : [],
+    ...(outcome?.skipped ? { writeSkipped: outcome.skipped } : {}),
+    _notes: [
+      'Only the edited ranges of the original text were rewritten; every other character is as it was.',
+      ...(added.length > 0
+        ? [
+            'newSchemaErrors[] lists XSD errors that the edits introduced (usually the order of children, or a parent left without a required child). A result with new XSD errors is never written.',
+          ]
+        : []),
+      ...(referrers.length > 0
+        ? [
+            'referencedFromOtherObjects[] lists dmRef elements in other CSDB objects whose referredFragment is an id that the edits remove.',
+          ]
+        : []),
+      ...edited.notes,
+      ...fixNotes([], summary),
+      ...writeNotes(write, outcome),
+      ...(write && path && outcome?.written
+        ? ['The file at "path" was overwritten in place.']
+        : []),
+      ...STANDARD_NOTES,
+      ...configNotes(ctx),
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // create_comment
 
 async function createCommentTool(args: Args) {
@@ -817,6 +1035,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   build_data_module: buildDataModuleTool,
   convert_manual: convertManualTool,
   apply_fixes: applyFixesTool,
+  edit_data_module: editDataModuleTool,
   create_comment: createCommentTool,
   extract_segments: extractSegmentsTool,
   apply_segments: applySegmentsTool,
