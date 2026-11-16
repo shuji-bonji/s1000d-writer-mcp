@@ -307,7 +307,7 @@ export const tools: ToolDefinition[] = [
   {
     name: 'edit_data_module',
     description:
-      'Change the structure of an EXISTING procedural or descriptive data module: insert a node, remove a node, move a node. Places are location.path values of the document as it is now (s1000d-reader-mcp read_data_module returns them); with several edits, every place still refers to the document before any edit. A node to insert is a structured draft node (step / para / admonition / listItem), never XML. All edits are applied or none: refusals[] gives the reason per edit (for example id-referenced, not-allowed-here, unsupported-node, released-issue). Only the edited ranges of the original text are rewritten; the rest stays character for character, and a moved element keeps its content unchanged. Elements that can be removed or moved: proceduralStep, para, warning, caution, note, listItem. This tool does NOT change the issue information or add change markup (changeType, changeMark, reasonForUpdate): a released issue (inWork "00") is refused unless allowReleasedIssue is true. The result is verified again; XSD errors that the edits introduced come back in newSchemaErrors[] and such a result is never written. Returns applied, xml, changes[], refusals[], newSchemaErrors[], referencedFromOtherObjects[], verification, fixes[]. Writes only when write is true (a path is overwritten in place).',
+      'Change the structure of an EXISTING procedural or descriptive data module: insert a node, remove a node, move a node. Places are location.path values of the document as it is now (s1000d-reader-mcp read_data_module returns them); with several edits, every place still refers to the document before any edit. A node to insert is a structured draft node (step / para / admonition / listItem), never XML. All edits are applied or none: refusals[] gives the reason per edit (for example id-referenced, not-allowed-here, unsupported-node, released-issue). Only the edited ranges of the original text are rewritten; the rest stays character for character, and a moved element keeps its content unchanged. Elements that can be removed or moved: proceduralStep, para, warning, caution, note, listItem. This tool does NOT change the issue information or add change markup (changeType, changeMark, reasonForUpdate): a released issue (inWork "00") is refused unless allowReleasedIssue is true. The result is verified again; XSD errors that the edits introduced come back in newSchemaErrors[] and such a result is never written. Returns applied, xml (unless includeXml is false), changes[], refusals[], newSchemaErrors[], referencedFromOtherObjects[], verification, fixes[] (without candidates for the new XSD errors: change the edits and call again instead). Writes only when write is true (a path is overwritten in place).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -358,6 +358,11 @@ export const tools: ToolDefinition[] = [
           type: 'boolean',
           description:
             'Write even though the document was ALREADY invalid against the XSD before the edits. It does not allow writing a result with new XSD errors.',
+        },
+        includeXml: {
+          type: 'boolean',
+          description:
+            'Include the XML in the response (default: true when write is false, false when write is true). Pass false to keep the response small when you only need changes[], refusals[], newSchemaErrors[] and verification.',
         },
         maxFixes: maxFixesParam,
       },

@@ -759,6 +759,7 @@ async function editDataModuleTool(args: Args) {
   const edits = (args.edits as ContentEdit[]) ?? [];
   if (edits.length === 0) throw new Error('"edits" must have at least one item');
   const write = args.write === true;
+  const includeXml = typeof args.includeXml === 'boolean' ? args.includeXml : !write;
   const maxFixes = int(args.maxFixes, LIMITS.defaultMaxFixes, 1, LIMITS.maxMaxFixes);
 
   const before = await verifyWithFixes(xml, pc, path);
@@ -770,7 +771,7 @@ async function editDataModuleTool(args: Args) {
   if (!edited.applied) {
     return {
       applied: false,
-      xml,
+      ...(includeXml ? { xml } : {}),
       changes: [],
       refusals: edited.refusals,
       newSchemaErrors: [],
@@ -857,10 +858,18 @@ async function editDataModuleTool(args: Args) {
     }
   }
 
-  const summary = summarizeFixes(after, maxFixes);
+  // 編集で増えた XSD のエラーへの候補は載せない。この結果は書き込まれず、apply_fixes に渡せないので、
+  // 候補を選ぶのではなく、位置か編集を変えて呼び直すのが正しい
+  const addedMessages = new Set(added.map((e) => e.message.trim()));
+  const listable = {
+    ...after,
+    fixes: after.fixes.filter((f) => !(f.kind === 'schema' && addedMessages.has(f.problem.trim()))),
+  };
+  const hiddenFixes = after.fixes.length - listable.fixes.length;
+  const summary = summarizeFixes(listable, maxFixes);
   return {
     applied: true,
-    xml: edited.xml,
+    ...(includeXml ? { xml: edited.xml } : {}),
     changes: edited.changes,
     refusals: [],
     newSchemaErrors: added,
@@ -873,7 +882,12 @@ async function editDataModuleTool(args: Args) {
       'Only the edited ranges of the original text were rewritten; every other character is as it was.',
       ...(added.length > 0
         ? [
-            'newSchemaErrors[] lists XSD errors that the edits introduced (usually the order of children, or a parent left without a required child). A result with new XSD errors is never written.',
+            'newSchemaErrors[] lists XSD errors that the edits introduced (usually the order of children, or a parent left without a required child). A result with new XSD errors is never written, and it cannot be passed to apply_fixes: change the position or the edits and call edit_data_module again on the original document.',
+            ...(hiddenFixes > 0
+              ? [
+                  `fixes[] does not list candidates for the ${hiddenFixes} new XSD error(s); it lists only what the document had before the edits.`,
+                ]
+              : []),
           ]
         : []),
       ...(referrers.length > 0
@@ -883,7 +897,9 @@ async function editDataModuleTool(args: Args) {
         : []),
       ...edited.notes,
       ...fixNotes([], summary),
-      ...writeNotes(write, outcome),
+      ...(write
+        ? writeNotes(write, outcome)
+        : [includeXml ? NOT_WRITTEN_NOTE : NOT_WRITTEN_NO_XML_NOTE]),
       ...(write && path && outcome?.written
         ? ['The file at "path" was overwritten in place.']
         : []),

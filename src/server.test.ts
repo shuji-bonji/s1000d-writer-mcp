@@ -524,6 +524,17 @@ describe('edit_data_module', () => {
     expect(r.data.written).toEqual([]);
     expect(readFileSync(DESCRIPT_DM, 'utf8')).toBe(xml);
     expect(r.data._notes.join(' ')).toContain('change markup');
+
+    const small = await call('edit_data_module', {
+      path: DESCRIPT_DM,
+      csdbDirs: [STRICT],
+      edits: [{ op: 'remove', at: `${LEVELLED}/para` }],
+      includeXml: false,
+    });
+    expect(small.data.applied).toBe(true);
+    expect(small.data.xml).toBeUndefined();
+    expect(small.data.changes).toHaveLength(1);
+    expect(small.data._notes.join(' ')).toContain('includeXml is false');
   });
 
   it('1 つでも断る理由があれば何も適用しない。refusals に理由と場所を返す', async () => {
@@ -592,6 +603,11 @@ describe('edit_data_module', () => {
     expect(r.data.applied).toBe(true);
     expect(r.data.newSchemaErrors).toHaveLength(1);
     expect(r.data.newSchemaErrors[0].message).toContain('description');
+    // 増えたエラーへの候補は fixes[] に載せず、呼び直すよう注記する
+    expect(r.data.fixes.filter((f: { kind: string }) => f.kind === 'schema')).toEqual([]);
+    expect(r.data._notes.join(' ')).toContain('call edit_data_module again');
+    // write: true のときは、既定で XML を返さない
+    expect(r.data.xml).toBeUndefined();
     expect(r.data.written).toEqual([]);
     expect(r.data.writeSkipped.reason).toBe('new-schema-errors');
     expect(readFileSync(file, 'utf8')).toBe(original);
@@ -613,6 +629,7 @@ describe('edit_data_module', () => {
       edits: [{ op: 'remove', at: `${MAIN}/proceduralStep[3]` }],
       allowReleasedIssue: true,
       write: true,
+      includeXml: true,
     };
 
     const other = join(dir, 'DMC-KENBAIKI-A-10-20-00-00A-040A-D_002-01_JA-JP.XML');
