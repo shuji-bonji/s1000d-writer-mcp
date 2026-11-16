@@ -1,6 +1,13 @@
 # Changelog
 
-## 未リリース
+## 0.4.0 (2026-11-17)
+
+依存の `@shuji-bonji/s1000d-core` を `^0.12.0` に上げ、`apply_fixes` の入力に `position` を足しました。
+
+### 変更（応答が変わります）
+
+- **BREX の違反に返す修正候補が変わります。** core 0.12.0 の変更です。条件付きで禁止する BREX ルールの候補は、「この要素を取り除く」（`exact`）ではなく、条件を成り立たなくする変更（`replace`・`add`。確からしさは `several` か `none`）になります。`exact` の候補は自動で適用するので、これまでは `identAndStatusSection` や文書要素を取り除く候補を適用するおそれがありました。属性が無いことが条件のルールには、`add` の候補か `note` を返します。
+- **`apply_fixes` が `candidate-not-offered` で断るときに、食い違った項目を `notes` に書きます。** `action` と値は合うのに `target`・`position` だけが違う候補があれば、その候補の `target` を知らせます。照合の厳しさは変わりません。
 
 ### 修正
 
