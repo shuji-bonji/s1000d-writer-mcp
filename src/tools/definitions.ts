@@ -255,7 +255,7 @@ export const tools: ToolDefinition[] = [
   {
     name: 'apply_fixes',
     description:
-      'Apply fixes to an existing data module. Each selection copies the location and ONE candidate of a fix that s1000d-verify-mcp suggest_fixes (or this server) returned: { location, action, target?, value? }. The server computes the fix candidates again and applies a selection only if it matches one of them; a value outside the candidates (or outside a range / pattern candidate) is not applied and comes back in rejected[] with the reason. "provide" candidates change the product, not the document: pass them as "product". The result is verified again. Returns xml, applied[], rejected[], verification, the fixes that remain. Writes only when write is true (a path is overwritten in place; xml is written under its own file name in the first CSDB folder).',
+      'Apply fixes to an existing data module. Each selection copies the location and ONE candidate of a fix that s1000d-verify-mcp suggest_fixes (or this server) returned: { location, action, target?, value?, position? }. The server computes the fix candidates again and applies a selection only if it matches one of them; a value outside the candidates (or outside a range / pattern candidate) is not applied and comes back in rejected[] with the reason. "provide" candidates change the product, not the document: pass them as "product". The result is verified again. Returns xml, applied[], rejected[], verification, the fixes that remain. Writes only when write is true (a path is overwritten in place; xml is written under its own file name in the first CSDB folder).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -283,6 +283,12 @@ export const tools: ToolDefinition[] = [
               action: { type: 'string', enum: ['replace', 'remove', 'add', 'retarget', 'provide'] },
               target: { type: 'string' },
               value: { type: 'string' },
+              position: {
+                type: 'string',
+                enum: ['before'],
+                description:
+                  'Copy it when the candidate has "position" (an element added before the one at the location). Without it the selection does not match that candidate.',
+              },
             },
             required: ['action'],
             additionalProperties: false,

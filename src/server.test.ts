@@ -553,6 +553,44 @@ describe('apply_fixes', () => {
     expect(ok.data.xml).toContain('<!ENTITY ICN-KENBAIKI-A-000000-0-K0001-00001-A-01-1 SYSTEM');
   });
 
+  it('position が付いた候補（兄弟を前に足す）は、position を写した選択だけを適用する', async () => {
+    useSpec(SPEC_STRICT); // descript の本文に levelledPara を置けない XSD
+    const probe = await call('apply_fixes', {
+      path: DESCRIPT_DM,
+      csdbDirs: [STRICT],
+      selections: [{ location: { path: '/dmodule/nothing' }, action: 'remove' }],
+    });
+    type Cand = { action: string; target?: string; value?: string; position?: string };
+    const fix = probe.data.fixes.find((f: { candidates: Cand[] }) =>
+      f.candidates.some((c) => c.position === 'before'),
+    );
+    expect(fix).toBeDefined();
+    const cand: Cand = fix.candidates.find((c: Cand) => c.position === 'before');
+    const base = {
+      location: fix.location,
+      action: cand.action,
+      target: cand.target,
+      value: cand.value,
+    };
+
+    // position を写さない選択は一致しない
+    const without = await call('apply_fixes', {
+      path: DESCRIPT_DM,
+      csdbDirs: [STRICT],
+      selections: [base],
+    });
+    expect(without.data.appliedCount).toBe(0);
+    expect(without.data.rejected[0].reason).toBe('candidate-not-offered');
+
+    const withPosition = await call('apply_fixes', {
+      path: DESCRIPT_DM,
+      csdbDirs: [STRICT],
+      selections: [{ ...base, position: 'before' }],
+    });
+    expect(withPosition.data.appliedCount).toBe(1);
+    expect(withPosition.data.applied[0].changed.after).toBe(`<${cand.value}>`);
+  });
+
   it('range の候補は、範囲に合う値だけを適用する（外れた値は value-not-allowed）。provide は文書を変えない', async () => {
     useSpec(SPEC);
     const xml = readFileSync(DESCRIPT_DM, 'utf8').replace('infoCode="040"', 'infoCode="041"');

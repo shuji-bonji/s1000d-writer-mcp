@@ -1,5 +1,11 @@
 # Changelog
 
+## 未リリース
+
+### 修正
+
+- **`apply_fixes` の `selections[]` に `position` を足しました。** これまでは `action`・`target`・`value` だけを core に渡していたので、`position: "before"` が付いた候補（XSD の「この要素はここに置けない」に対する、兄弟を前に足す候補）は、候補をそのまま写しても `candidate-not-offered` で断られ、適用できませんでした。候補に `position` があるときは、選択にも写します。
+
 ## 0.3.1 (2026-11-16)
 
 依存の `@shuji-bonji/s1000d-core` を `^0.11.0` に上げました。core 0.11.0 の変更は本文の読み取りです。このサーバーの動きは変わりません。

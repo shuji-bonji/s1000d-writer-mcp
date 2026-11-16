@@ -539,6 +539,8 @@ interface Selection {
   action: FixCandidate['action'];
   target?: string;
   value?: string;
+  /** 候補の position（兄弟を前に足す候補は 'before'）。core は position も照合する */
+  position?: FixCandidate['position'];
 }
 
 async function applyFixesTool(args: Args) {
@@ -560,7 +562,13 @@ async function applyFixesTool(args: Args) {
       confidence: 'none',
       source: 'selection',
     },
-    candidate: { action: s.action, target: s.target, value: s.value, description: '(selection)' },
+    candidate: {
+      action: s.action,
+      target: s.target,
+      value: s.value,
+      ...(s.position ? { position: s.position } : {}),
+      description: '(selection)',
+    },
   });
   const out = applyFixes(xml, selections.map(asFix), {
     offered: before.fixes,
