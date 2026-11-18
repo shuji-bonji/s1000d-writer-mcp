@@ -4,6 +4,7 @@
  */
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -140,10 +141,11 @@ describe('server', () => {
     expect(text).toContain('S1000D_SPEC_DIR');
     expect(text).toContain('input-error');
   });
-  it('7 ツールがすべて登録されている', async () => {
+  it('9 ツールがすべて登録されている', async () => {
     const listed = (await client.listTools()).tools.map((t) => t.name).sort();
     expect(listed).toEqual(
       [
+        'add_reason_for_update',
         'apply_fixes',
         'apply_segments',
         'build_data_module',
@@ -151,6 +153,7 @@ describe('server', () => {
         'create_comment',
         'edit_data_module',
         'extract_segments',
+        'start_revision',
       ].sort(),
     );
     expect(listed).toEqual(tools.map((t) => t.name).sort());
@@ -657,6 +660,199 @@ describe('edit_data_module', () => {
     expect(written.data.written).toEqual([file]);
     expect(readFileSync(file, 'utf8')).toBe(written.data.xml);
     expect(written.data.xml).not.toContain('保守モードに入る');
+  });
+});
+
+describe('start_revision / marking / add_reason_for_update', () => {
+  const NAME = 'DMC-KENBAIKI-A-10-20-00-00A-520A-A_001-00_JA-JP.XML';
+  const IN_WORK = NAME.replace('_001-00_', '_001-01_');
+  const MAIN = '/dmodule/content/procedure/mainProcedure';
+  const csdb = () => {
+    const dir = tmp();
+    cpSync(STRICT, dir, { recursive: true });
+    return dir;
+  };
+
+  it('作業中の版を新しいファイルに書き、印を付けて編集し、理由を足す', async () => {
+    useSpec(SPEC);
+    const dir = csdb();
+    const released = join(dir, NAME);
+    const original = readFileSync(released, 'utf8');
+
+    // 発行済みの版に marking を渡すと断り、start_revision を案内する
+    const refused = await call('edit_data_module', {
+      path: released,
+      csdbDirs: [dir],
+      edits: [{ op: 'remove', at: `${MAIN}/proceduralStep[3]` }],
+      marking: { reason: { text: '手順を見直した。', updateReasonType: 'urt02' }, changeMark: '1' },
+      allowReleasedIssue: true,
+    });
+    expect(refused.data.applied).toBe(false);
+    expect(refused.data.refusals[0].reason).toBe('released-issue');
+    expect(refused.data._notes.join(' ')).toContain('start_revision');
+
+    const started = await call('start_revision', {
+      path: released,
+      csdbDirs: [dir],
+      issueType: 'changed',
+      write: true,
+    });
+    expect(started.isError).toBe(false);
+    expect(started.data.started).toBe(true);
+    expect(started.data.previous).toEqual({
+      issueInfo: { issueNumber: '001', inWork: '00' },
+      issueType: 'new',
+    });
+    expect(started.data.issueInfo).toEqual({ issueNumber: '001', inWork: '01' });
+    expect(started.data.fileName).toBe(IN_WORK);
+    expect(started.data.newSchemaErrors).toEqual([]);
+    const file = join(dir, IN_WORK);
+    expect(started.data.written).toEqual([file]);
+    expect(started.data.xml).toBeUndefined();
+    expect(readFileSync(released, 'utf8')).toBe(original);
+    const inWork = readFileSync(file, 'utf8');
+    expect(inWork).toContain('<issueInfo issueNumber="001" inWork="01"/>');
+    expect(inWork).toContain('<dmStatus issueType="changed">');
+
+    // 同じ名前があれば書かない
+    const again = await call('start_revision', {
+      path: released,
+      csdbDirs: [dir],
+      issueType: 'changed',
+      write: true,
+    });
+    expect(again.data.writeSkipped.reason).toBe('write-conflict');
+    expect(readFileSync(file, 'utf8')).toBe(inWork);
+
+    // 最初の編集は marking.reason（理由を足す）
+    clearCaches();
+    const first = await call('edit_data_module', {
+      path: file,
+      csdbDirs: [dir],
+      edits: [
+        { op: 'remove', at: `${MAIN}/proceduralStep[3]` },
+        {
+          op: 'insert',
+          to: `${MAIN}/proceduralStep[3]`,
+          position: 'after',
+          node: { kind: 'step', text: '保守モードに入り、扉を閉める。' },
+        },
+      ],
+      marking: { reason: { text: '手順を見直した。', updateReasonType: 'urt02' }, changeMark: '1' },
+      write: true,
+      includeXml: true,
+    });
+    expect(first.data.refusals).toEqual([]);
+    expect(first.data.applied).toBe(true);
+    expect(first.data.reasonForUpdate).toEqual({
+      id: 'rfu-0001',
+      added: true,
+      updateReasonType: 'urt02',
+    });
+    expect(first.data.changes[0]).toMatchObject({ kept: true, mark: { changeType: 'delete' } });
+    expect(first.data.changes[1].mark).toMatchObject({ changeType: 'add' });
+    expect(first.data.xml).toContain(
+      '<proceduralStep changeType="delete" changeMark="1" reasonForUpdateRefIds="rfu-0001"><para>保守モードに入る。</para></proceduralStep>',
+    );
+    expect(first.data.xml).toContain(
+      '<proceduralStep changeType="add" changeMark="1" reasonForUpdateRefIds="rfu-0001">',
+    );
+    expect(first.data.newSchemaErrors).toEqual([]);
+    expect(first.data.written).toEqual([file]);
+    expect(first.data._notes.join(' ')).toContain('marking.reasonRefId "rfu-0001"');
+
+    // 同じ理由の 2 回目は marking.reasonRefId（理由を足さない）
+    const second = await call('edit_data_module', {
+      path: file,
+      csdbDirs: [dir],
+      edits: [{ op: 'remove', at: `${MAIN}/proceduralStep[2]` }],
+      marking: { reasonRefId: 'rfu-0001', changeMark: '1' },
+      write: true,
+      includeXml: true,
+    });
+    expect(second.data.refusals).toEqual([]);
+    expect(second.data.reasonForUpdate).toEqual({
+      id: 'rfu-0001',
+      added: false,
+      updateReasonType: 'urt02',
+    });
+    expect(second.data.xml.match(/<reasonForUpdate /g)).toHaveLength(1);
+    expect(second.data.xml.match(/reasonForUpdateRefIds="rfu-0001"/g)).toHaveLength(3);
+
+    // 印を付けない変更の理由（urt01）は add_reason_for_update
+    const reason = await call('add_reason_for_update', {
+      path: file,
+      csdbDirs: [dir],
+      reason: { text: '誤字を直した。', updateReasonType: 'urt01' },
+      write: true,
+      includeXml: true,
+    });
+    expect(reason.data.refusals).toEqual([]);
+    expect(reason.data.added).toBe(true);
+    expect(reason.data.reasonForUpdate).toEqual({ id: 'rfu-0002', updateReasonType: 'urt01' });
+    expect(reason.data.newSchemaErrors).toEqual([]);
+    expect(reason.data.written).toEqual([file]);
+    expect(readFileSync(file, 'utf8')).toBe(reason.data.xml);
+    expect(reason.data.xml.match(/<reasonForUpdate /g)).toHaveLength(2);
+    // urt01 の理由は、印から指せない
+    const editorial = await call('edit_data_module', {
+      path: file,
+      csdbDirs: [dir],
+      edits: [{ op: 'remove', at: `${MAIN}/proceduralStep[1]/proceduralStep[1]` }],
+      marking: { reasonRefId: 'rfu-0002', changeMark: '1' },
+    });
+    expect(editorial.data.refusals[0].reason).toBe('editorial-reason');
+    expect(readFileSync(released, 'utf8')).toBe(original);
+  });
+
+  it('start_revision は理由を一緒に受け取れる。足せない理由なら、版も始めない', async () => {
+    useSpec(SPEC);
+    const dir = csdb();
+    const released = join(dir, NAME);
+    const r = await call('start_revision', {
+      path: released,
+      csdbDirs: [dir],
+      issueType: 'status',
+      reason: { text: '適用性を見直した。', updateReasonType: 'urt04', updateHighlight: '1' },
+    });
+    expect(r.data.started).toBe(true);
+    expect(r.data.reasonForUpdate).toEqual({
+      id: 'rfu-0001',
+      updateReasonType: 'urt04',
+      updateHighlight: '1',
+    });
+    expect(r.data.xml).toContain('<dmStatus issueType="status">');
+    expect(r.data.xml).toContain(
+      '<reasonForUpdate id="rfu-0001" updateReasonType="urt04" updateHighlight="1">',
+    );
+    expect(r.data.written).toEqual([]);
+    expect(readdirSync(dir)).not.toContain(IN_WORK);
+
+    const bad = await call('start_revision', {
+      path: released,
+      csdbDirs: [dir],
+      issueType: 'status',
+      reason: { text: 'x', updateReasonType: 'urt04', id: 'stp-0001' },
+      write: true,
+    });
+    expect(bad.data.started).toBe(false);
+    expect(bad.data.refusals[0].reason).toBe('id-duplicate');
+    expect(bad.data.written).toEqual([]);
+    expect(readdirSync(dir)).not.toContain(IN_WORK);
+
+    // 発行済みの版には、理由だけを足せない
+    const direct = await call('add_reason_for_update', {
+      path: released,
+      csdbDirs: [dir],
+      reason: { text: 'x', updateReasonType: 'urt01' },
+      write: true,
+    });
+    expect(direct.data.added).toBe(false);
+    expect(direct.data.refusals[0].reason).toBe('released-issue');
+    expect(direct.data._notes.join(' ')).toContain('start_revision');
+    // core の関数名ではなく、ツールの名前で案内する
+    expect(direct.data.refusals[0].message).toContain('start_revision');
+    expect(JSON.stringify(direct.data)).not.toMatch(/startRevision|addReasonForUpdate|editContent/);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   CsdbIndex,
   DraftInputError,
   DirectoryCsdbSource,
+  addReasonForUpdate,
   applyFixes,
   applySegments,
   buildComment,
@@ -23,6 +24,7 @@ import {
   readDataModuleInfo,
   readDmRef,
   sameDmc,
+  startRevision,
   type Allocation,
   type BuildOptions,
   type BuildResult,
@@ -30,6 +32,7 @@ import {
   type ContentEdit,
   type DmCode,
   type DraftDataModule,
+  type EditMarking,
   type Fix,
   type FixCandidate,
   type GraphicFormat,
@@ -38,6 +41,8 @@ import {
   type NodeLocation,
   type SchemaValidationError,
   type Product,
+  type ReasonForUpdateInput,
+  type RevisionIssueType,
   type SegmentCategory,
   type VerificationStatus,
 } from '@shuji-bonji/s1000d-core';
@@ -762,10 +767,13 @@ async function editDataModuleTool(args: Args) {
   const includeXml = typeof args.includeXml === 'boolean' ? args.includeXml : !write;
   const maxFixes = int(args.maxFixes, LIMITS.defaultMaxFixes, 1, LIMITS.maxMaxFixes);
 
+  const marking = args.marking as EditMarking | undefined;
+
   const before = await verifyWithFixes(xml, pc, path);
   const edited = editContent(xml, edits, {
     allowReleasedIssue: args.allowReleasedIssue === true,
     xsd: xsdFor(before.result),
+    ...(marking ? { marking } : {}),
   });
 
   if (!edited.applied) {
@@ -773,7 +781,7 @@ async function editDataModuleTool(args: Args) {
       applied: false,
       ...(includeXml ? { xml } : {}),
       changes: [],
-      refusals: edited.refusals,
+      refusals: withToolNames(edited.refusals),
       newSchemaErrors: [],
       referencedFromOtherObjects: [],
       verification: before.result.status,
@@ -783,10 +791,12 @@ async function editDataModuleTool(args: Args) {
         'No edit was applied (all or nothing). refusals[] gives the reason and the place of each edit that was refused; "verification" and fixes[] describe the document as it was given.',
         ...(edited.refusals.some((r) => r.reason === 'released-issue')
           ? [
-              'The document is a released issue (inWork "00"). This tool changes neither the issue information nor change markup; ask the user before passing allowReleasedIssue: true.',
+              marking
+                ? 'The document is a released issue (inWork "00"). Change markup is added only to an in-work issue: call start_revision first (ask the user for the issueType), then edit the file it wrote. allowReleasedIssue does not apply with marking.'
+                : 'The document is a released issue (inWork "00"). Without marking, this tool changes neither the issue information nor change markup. Ask the user which they want: start an in-work issue with start_revision and edit with marking, or edit this issue in place with allowReleasedIssue: true.',
             ]
           : []),
-        ...edited.notes,
+        ...edited.notes.map(toolNames),
         ...STANDARD_NOTES,
         ...configNotes(ctx),
       ],
@@ -871,6 +881,7 @@ async function editDataModuleTool(args: Args) {
     applied: true,
     ...(includeXml ? { xml: edited.xml } : {}),
     changes: edited.changes,
+    ...(edited.reasonForUpdate ? { reasonForUpdate: edited.reasonForUpdate } : {}),
     refusals: [],
     newSchemaErrors: added,
     referencedFromOtherObjects: referrers,
@@ -895,7 +906,296 @@ async function editDataModuleTool(args: Args) {
             'referencedFromOtherObjects[] lists dmRef elements in other CSDB objects whose referredFragment is an id that the edits remove.',
           ]
         : []),
-      ...edited.notes,
+      ...(edited.reasonForUpdate
+        ? [
+            edited.reasonForUpdate.added
+              ? `reasonForUpdate "${edited.reasonForUpdate.id}" was added to the status element and the change markup refers to it. For further edits with the SAME reason, pass marking.reasonRefId "${edited.reasonForUpdate.id}" instead of marking.reason, so that one reason is written once.`
+              : `The change markup refers to the existing reasonForUpdate "${edited.reasonForUpdate.id}"; the status element was not changed.`,
+            'changes[].mark tells which element got which changeType. A removed node with kept: true is still in the document, marked changeType="delete".',
+          ]
+        : []),
+      ...edited.notes.map(toolNames),
+      ...fixNotes([], summary),
+      ...(write
+        ? writeNotes(write, outcome)
+        : [includeXml ? NOT_WRITTEN_NOTE : NOT_WRITTEN_NO_XML_NOTE]),
+      ...(write && path && outcome?.written
+        ? ['The file at "path" was overwritten in place.']
+        : []),
+      ...STANDARD_NOTES,
+      ...configNotes(ctx),
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// start_revision / add_reason_for_update
+
+/** core の関数名で書かれた文を、このサーバーのツール名に読み替える（core の notes と refusals の message） */
+const toolNames = (text: string): string =>
+  text
+    .replace(/\bstartRevision\b/g, 'start_revision')
+    .replace(/\baddReasonForUpdate\b/g, 'add_reason_for_update')
+    .replace(/\beditContent\b/g, 'edit_data_module');
+const withToolNames = <T extends { message: string }>(refusals: T[]): T[] =>
+  refusals.map((r) => ({ ...r, message: toolNames(r.message) }));
+
+function reasonArg(v: unknown): ReasonForUpdateInput | undefined {
+  return v && typeof v === 'object' ? (v as ReasonForUpdateInput) : undefined;
+}
+
+async function startRevisionTool(args: Args) {
+  const path = str(args.path);
+  const xml = loadXml({ path, xml: str(args.xml) }, LIMITS.maxInlineXmlBytes);
+  const ctx: ContextOptions = { extraDirs: strArray(args.csdbDirs) };
+  const pc = makePipelineContext(ctx, { product: productArg(args.product) });
+  const write = args.write === true;
+  const includeXml = typeof args.includeXml === 'boolean' ? args.includeXml : !write;
+  const maxFixes = int(args.maxFixes, LIMITS.defaultMaxFixes, 1, LIMITS.maxMaxFixes);
+  const reason = reasonArg(args.reason);
+
+  const before = await verifyWithFixes(xml, pc, path);
+  const started = startRevision(xml, { issueType: str(args.issueType) as RevisionIssueType });
+  // 理由を受け取ったら、作業中の版にした文書に続けて足す。足せなければ、版も始めない（1 つも適用しない）
+  const withReason =
+    started.started && reason ? addReasonForUpdate(started.xml, reason) : undefined;
+  const refusals = withToolNames([...started.refusals, ...(withReason?.refusals ?? [])]);
+
+  if (!started.started || (withReason && !withReason.added)) {
+    return {
+      started: false,
+      ...(includeXml ? { xml } : {}),
+      ...(started.previous ? { previous: started.previous } : {}),
+      refusals,
+      newSchemaErrors: [],
+      referencedFromOtherObjects: [],
+      verification: before.result.status,
+      ...summarizeFixes(before, maxFixes),
+      written: [],
+      _notes: [
+        'No in-work issue was started (all or nothing). refusals[] gives the reason; "verification" and fixes[] describe the document as it was given.',
+        ...(refusals.some((r) => r.reason === 'issue-type-input-error')
+          ? [
+              "issueType is the user's decision (changed: changes shown with change markup; revised: reworked, no change markup; status: only the identification and status section). Ask the user; do not choose it.",
+            ]
+          : []),
+        ...(refusals.some((r) => r.reason === 'already-in-work')
+          ? [
+              'The document is already an in-work issue: edit it with edit_data_module (marking) or add a reason with add_reason_for_update.',
+            ]
+          : []),
+        ...STANDARD_NOTES,
+        ...configNotes(ctx),
+      ],
+    };
+  }
+
+  const out = withReason?.xml ?? started.xml;
+  // DM は core が返す名前。そのほか（PM など）は、path の名前の版の部分だけを書き換える
+  const derived =
+    started.fileName ??
+    (path
+      ? (() => {
+          const base = path.replace(/^.*[\\/]/, '');
+          const next = base.replace(/_(\d{3,4})-00(?=[_.])/, '_$1-01');
+          return next !== base ? next : undefined;
+        })()
+      : undefined);
+  const after = await verifyWithFixes(out, pc, derived ?? path);
+  const added = newSchemaErrors(before.result.schema.errors, after.result.schema.errors);
+  const removedIds = [...idsIn(xml)].filter((id) => !idsIn(out).has(id));
+  const info = (() => {
+    try {
+      return readDataModuleInfo(out).identAndStatus;
+    } catch {
+      return undefined;
+    }
+  })();
+  const referrers = referencesFromOtherObjects(pc, info?.dmCode, removedIds, path);
+
+  let outcome: WriteOutcome | undefined;
+  if (write) {
+    if (added.length > 0) {
+      outcome = {
+        skipped: {
+          reason: 'new-schema-errors',
+          detail: `Starting the in-work issue adds ${added.length} XSD error(s) that the document did not have (newSchemaErrors[]); nothing was written.`,
+        },
+      };
+    } else if (referrers.length > 0) {
+      outcome = {
+        skipped: {
+          reason: 'referenced-from-other-objects',
+          detail: `${referrers.length} dmRef(s) in other CSDB objects point at an id of an element that was marked changeType="delete" and is removed (referencedFromOtherObjects[]); nothing was written. Change those references first.`,
+        },
+      };
+    } else if (!derived) {
+      outcome = {
+        skipped: {
+          reason: 'no-csdb-dir',
+          detail: 'The file name of the in-work issue could not be derived; pass path.',
+        },
+      };
+    } else {
+      // 元のファイルは変えない。path があれば同じフォルダーに、無ければ CSDB の書き込み先に、新しい名前で書く
+      const source = path ? new DirectoryCsdbSource([dirname(resolve(path))]) : writableSource(ctx);
+      outcome = tryWriteText(source, derived, out, {
+        overwrite: args.overwrite === true,
+        allowInvalid: args.allowInvalid === true,
+        verification: after.result.status,
+      });
+    }
+  }
+
+  const summary = summarizeFixes(after, maxFixes);
+  return {
+    started: true,
+    ...(includeXml ? { xml: out } : {}),
+    previous: started.previous,
+    issueInfo: started.issueInfo,
+    issueType: started.issueType,
+    ...(derived ? { fileName: derived } : {}),
+    removed: started.removed,
+    ...(withReason?.reasonForUpdate ? { reasonForUpdate: withReason.reasonForUpdate } : {}),
+    refusals: [],
+    newSchemaErrors: added,
+    referencedFromOtherObjects: referrers,
+    verification: after.result.status,
+    ...summary,
+    written: outcome?.written ? [outcome.written] : [],
+    ...(outcome?.skipped ? { writeSkipped: outcome.skipped } : {}),
+    _notes: [
+      'An in-work issue was made from the released issue: inWork is "01", issueNumber is unchanged, issueType is the value given. The change markup and the reasons for update of the previous issue were removed (removed{}); elements marked changeType="delete" in the previous issue are gone. Only those ranges of the original text were rewritten.',
+      'The released issue is never changed: the in-work issue is a NEW file (fileName). Edit that file from now on (edit_data_module with marking, add_reason_for_update). Releasing it (inWork back to "00", issueNumber + 1, issueDate, quality assurance) is not done by this server.',
+      ...(added.length > 0
+        ? [
+            'newSchemaErrors[] lists XSD errors that the document did not have before (usually a parent left without a required child after an element marked changeType="delete" was removed). Such a result is never written.',
+          ]
+        : []),
+      ...(referrers.length > 0
+        ? [
+            'referencedFromOtherObjects[] lists dmRef elements in other CSDB objects whose referredFragment is an id that no longer exists in the in-work issue.',
+          ]
+        : []),
+      ...started.notes.map(toolNames),
+      ...(withReason?.notes ?? []).map(toolNames),
+      ...fixNotes([], summary),
+      ...(write
+        ? writeNotes(write, outcome)
+        : [includeXml ? NOT_WRITTEN_NOTE : NOT_WRITTEN_NO_XML_NOTE]),
+      ...STANDARD_NOTES,
+      ...configNotes(ctx),
+    ],
+  };
+}
+
+async function addReasonForUpdateTool(args: Args) {
+  const path = str(args.path);
+  const xml = loadXml({ path, xml: str(args.xml) }, LIMITS.maxInlineXmlBytes);
+  const ctx: ContextOptions = { extraDirs: strArray(args.csdbDirs) };
+  const pc = makePipelineContext(ctx, { product: productArg(args.product) });
+  const write = args.write === true;
+  const includeXml = typeof args.includeXml === 'boolean' ? args.includeXml : !write;
+  const maxFixes = int(args.maxFixes, LIMITS.defaultMaxFixes, 1, LIMITS.maxMaxFixes);
+
+  const before = await verifyWithFixes(xml, pc, path);
+  const result = addReasonForUpdate(xml, reasonArg(args.reason) as ReasonForUpdateInput);
+  if (!result.added) {
+    return {
+      added: false,
+      ...(includeXml ? { xml } : {}),
+      refusals: withToolNames(result.refusals),
+      newSchemaErrors: [],
+      verification: before.result.status,
+      ...summarizeFixes(before, maxFixes),
+      written: [],
+      _notes: [
+        'Nothing was added. refusals[] gives the reason; "verification" and fixes[] describe the document as it was given.',
+        ...(result.refusals.some((r) => r.reason === 'released-issue')
+          ? [
+              'The document is a released issue (inWork "00"): call start_revision first (it also takes "reason"), then work on the file it wrote.',
+            ]
+          : []),
+        ...(result.refusals.some((r) => r.reason === 'reason-input-error')
+          ? [
+              "The text and updateReasonType of a reason are the user's decision; ask the user, do not fill them in.",
+            ]
+          : []),
+        ...STANDARD_NOTES,
+        ...configNotes(ctx),
+      ],
+    };
+  }
+
+  const after = await verifyWithFixes(result.xml, pc, path);
+  const added = newSchemaErrors(before.result.schema.errors, after.result.schema.errors);
+  let outcome: WriteOutcome | undefined;
+  if (write) {
+    if (added.length > 0) {
+      outcome = {
+        skipped: {
+          reason: 'new-schema-errors',
+          detail: `Adding the reason adds ${added.length} XSD error(s) that the document did not have (newSchemaErrors[]); nothing was written.`,
+        },
+      };
+    } else if (path) {
+      if (after.result.status.schema.state === 'invalid' && args.allowInvalid !== true) {
+        outcome = {
+          skipped: {
+            reason: 'schema-invalid',
+            detail:
+              'The document was already invalid against the XSD and still is; the file was not changed. Pass allowInvalid: true to write it anyway.',
+          },
+        };
+      } else {
+        writeFileSync(path, result.xml);
+        outcome = { written: path };
+      }
+    } else {
+      const info = (() => {
+        try {
+          return readDataModuleInfo(result.xml).identAndStatus;
+        } catch {
+          return undefined;
+        }
+      })();
+      const name = info
+        ? formatDmcFileName({
+            dmCode: info.dmCode,
+            issueInfo: info.issueInfo,
+            language: info.language,
+            extension: 'XML',
+          })
+        : undefined;
+      outcome = name
+        ? tryWriteText(writableSource(ctx), name, result.xml, {
+            overwrite: args.overwrite === true,
+            allowInvalid: args.allowInvalid === true,
+            verification: after.result.status,
+          })
+        : {
+            skipped: {
+              reason: 'no-csdb-dir',
+              detail: 'The file name could not be derived from the XML; pass path instead.',
+            },
+          };
+    }
+  }
+
+  const summary = summarizeFixes(after, maxFixes);
+  return {
+    added: true,
+    ...(includeXml ? { xml: result.xml } : {}),
+    reasonForUpdate: result.reasonForUpdate,
+    refusals: [],
+    newSchemaErrors: added,
+    verification: after.result.status,
+    ...summary,
+    written: outcome?.written ? [outcome.written] : [],
+    ...(outcome?.skipped ? { writeSkipped: outcome.skipped } : {}),
+    _notes: [
+      'One reasonForUpdate was added to the status element. The content and change markup were not changed; every other character is as it was.',
+      ...result.notes.map(toolNames),
       ...fixNotes([], summary),
       ...(write
         ? writeNotes(write, outcome)
@@ -1052,6 +1352,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
   convert_manual: convertManualTool,
   apply_fixes: applyFixesTool,
   edit_data_module: editDataModuleTool,
+  start_revision: startRevisionTool,
+  add_reason_for_update: addReasonForUpdateTool,
   create_comment: createCommentTool,
   extract_segments: extractSegmentsTool,
   apply_segments: applySegmentsTool,

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 (2026-11-18)
+
+発行済みのデータモジュールを、S1000D の版の決まりに沿って直すための入口を足しました。ツールは 9 つになります。
+
+### 追加
+
+- **`start_revision`（新しいツール）。** 発行済みの版（`inWork` が `00`）から、作業中の版（`inWork` が `01`）を作ります。`issueType`（`changed`・`revised`・`status`。`001-00` から始めるときだけ `new` も）は必須で、サーバーは選びません。前の版の変更の印と `reasonForUpdate` を消し、`changeType="delete"` の要素を取り除きます。`write: true` のときは、作業中の版を新しいファイル名（応答の `fileName`）で書きます。`path` を渡したときは同じフォルダーに、`xml` を渡したときは CSDB の書き込み先に書きます。発行済みの版のファイルは変えません。同じ名前のファイルがあれば `write-conflict` です。`reason` を渡すと、同じ呼び出しで `reasonForUpdate` を 1 つ足します。理由を足せないときは、版も始めません。
+- **`add_reason_for_update`（新しいツール）。** 作業中の版の `dmStatus` に `reasonForUpdate` を 1 つ足します。本文には触らず、変更の印も付けません。変更の印を付けない変更（編集上の変更 `urt01`、`issueType` が `revised`・`status` の版）の理由を書くための入口です。発行済みの版は断ります。
+- **`edit_data_module` の `marking`。** 渡すと、作業中の版に変更の印を付けます。insert は `changeType="add"`、remove は要素を残して `changeType="delete"`（`changes[].kept`）、同じ親の中の move は親に `changeType="modify"` です。`marking.reason` は、印が指す `reasonForUpdate` を足します（その理由による最初の編集）。`marking.reasonRefId` は、識別・状態部に既にある `reasonForUpdate` の `id` を指します（同じ理由による 2 回目からの編集）。どちらか一方だけを渡します。応答の `reasonForUpdate`（`added` が `true` なら足したもの）と `changes[].mark` に結果を返します。`marking` を渡したときは、`allowReleasedIssue` があっても発行済みの版を断ります。
+
+### 変わらないもの
+
+- `marking` を渡さない `edit_data_module` の動きは、0.5.1 と同じです。
+- 発行（`inWork` を `00` に戻し、`issueNumber` を上げる）、`issueDate`・品質保証の状態の更新は行いません。
+
+### テスト
+
+- 自作の CSDB のテストを 2 件足しました（作業中の版を書く → 印を付けて編集する → 同じ理由で 2 回目の編集をする → 理由だけを足す、の一連。`start_revision` に理由を渡す場合と、断る場合）。
+
 ## 0.5.1 (2026-11-17)
 
 `edit_data_module` の応答を、呼んだ側が次の操作を決めやすい形にしました。編集の結果と、書き込むかどうかの判定は変わりません。

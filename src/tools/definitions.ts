@@ -59,6 +59,32 @@ const writeParam = {
     'Write the result into the CSDB (the first folder of csdbDirs / S1000D_CSDB_DIR). Default false: the XML is only returned. Nothing is written when the XML is not valid against the XSD unless allowInvalid is true.',
   default: false,
 } as const;
+const reasonParam = {
+  type: 'object',
+  description:
+    "One reason for update (reasonForUpdate in the status element). The text and the type are the user's: never fill them in.",
+  properties: {
+    text: { type: 'string', minLength: 1, description: 'The text of the reason (one simplePara).' },
+    updateReasonType: {
+      type: 'string',
+      pattern: '^urt[0-9]{2}$',
+      description:
+        'S1000D updateReasonType, written as given: urt01 editorial change (no change markup may refer to it), urt02 technical change, urt03 markup only, urt04 applicability only, urt05 references only; urt51-urt99 are project values. Required: it is never chosen for you.',
+    },
+    updateHighlight: {
+      type: 'string',
+      enum: ['0', '1'],
+      description: '"1": this reason goes into the Highlights data module.',
+    },
+    id: {
+      type: 'string',
+      description:
+        'reasonForUpdate/@id. Omit it: an id that is not in the document is made (rfu-0001 …). An id already in the document is refused.',
+    },
+  },
+  required: ['text', 'updateReasonType'],
+  additionalProperties: false,
+} as const;
 const overwriteParam = {
   type: 'boolean',
   description:
@@ -307,7 +333,7 @@ export const tools: ToolDefinition[] = [
   {
     name: 'edit_data_module',
     description:
-      'Change the structure of an EXISTING procedural or descriptive data module: insert a node, remove a node, move a node. Places are location.path values of the document as it is now (s1000d-reader-mcp read_data_module returns them); with several edits, every place still refers to the document before any edit. A node to insert is a structured draft node (step / para / admonition / listItem), never XML. All edits are applied or none: refusals[] gives the reason per edit (for example id-referenced, not-allowed-here, unsupported-node, released-issue). Only the edited ranges of the original text are rewritten; the rest stays character for character, and a moved element keeps its content unchanged. Elements that can be removed or moved: proceduralStep, para, warning, caution, note, listItem. This tool does NOT change the issue information or add change markup (changeType, changeMark, reasonForUpdate): a released issue (inWork "00") is refused unless allowReleasedIssue is true. The result is verified again; XSD errors that the edits introduced come back in newSchemaErrors[] and such a result is never written. Returns applied, xml (unless includeXml is false), changes[], refusals[], newSchemaErrors[], referencedFromOtherObjects[], verification, fixes[] (without candidates for the new XSD errors: change the edits and call again instead). Writes only when write is true (a path is overwritten in place).',
+      'Change the structure of an EXISTING procedural or descriptive data module: insert a node, remove a node, move a node. Places are location.path values of the document as it is now (s1000d-reader-mcp read_data_module returns them); with several edits, every place still refers to the document before any edit. A node to insert is a structured draft node (step / para / admonition / listItem), never XML. All edits are applied or none: refusals[] gives the reason per edit (for example id-referenced, not-allowed-here, unsupported-node, released-issue). Only the edited ranges of the original text are rewritten; the rest stays character for character, and a moved element keeps its content unchanged. Elements that can be removed or moved: proceduralStep, para, warning, caution, note, listItem. Without "marking" this tool does NOT change the issue information or add change markup (changeType, changeMark, reasonForUpdate): a released issue (inWork "00") is refused unless allowReleasedIssue is true. With "marking" it adds change markup on an IN-WORK issue (start one with start_revision): an inserted node gets changeType="add"; a removed node is KEPT and gets changeType="delete" (changes[].kept); a move is accepted only within the same parent, which gets changeType="modify"; edits inside an element already marked add or delete get no markup; reasonForUpdate tells which reason the markup refers to. The result is verified again; XSD errors that the edits introduced come back in newSchemaErrors[] and such a result is never written. Returns applied, xml (unless includeXml is false), changes[] (each with mark when change markup was added), reasonForUpdate (with marking), refusals[], newSchemaErrors[], referencedFromOtherObjects[], verification, fixes[] (without candidates for the new XSD errors: change the edits and call again instead). Writes only when write is true (a path is overwritten in place).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -346,10 +372,31 @@ export const tools: ToolDefinition[] = [
             additionalProperties: false,
           },
         },
+        marking: {
+          type: 'object',
+          description:
+            'Add change markup for these edits (in-work issue only; issueType must be changed, status, rinstate-changed or rinstate-status). Give exactly ONE of reason and reasonRefId: "reason" adds a new reasonForUpdate and the markup refers to it (first edit for that reason; urt01 is refused, an editorial change has no change markup); "reasonRefId" is the id of a reasonForUpdate ALREADY in the status element (later edits for the same reason; nothing is added). One call = one reason: call again for edits with another reason. Omit marking to edit without change markup.',
+          properties: {
+            reason: reasonParam,
+            reasonRefId: {
+              type: 'string',
+              description:
+                'id of a reasonForUpdate already in the document (identAndStatus.reasonForUpdates[].id from s1000d-reader-mcp, or reasonForUpdate.id of an earlier response).',
+            },
+            changeMark: {
+              type: 'string',
+              enum: ['0', '1'],
+              description:
+                '"1": show a change mark (change bar) for these changes; "0": do not. The project decides; ask the user.',
+            },
+          },
+          required: ['changeMark'],
+          additionalProperties: false,
+        },
         allowReleasedIssue: {
           type: 'boolean',
           description:
-            'Edit a released issue (issueInfo/@inWork "00") in place, without changing the issue information or adding change markup. Default false. Set it only when the user has said so: the result does not follow the S1000D rules for updating a released data module.',
+            'Edit a released issue (issueInfo/@inWork "00") in place, without changing the issue information or adding change markup. Default false. Set it only when the user has said so: the result does not follow the S1000D rules for updating a released data module. It has no effect with marking (a released issue is then always refused).',
         },
         product: productParam,
         write: writeParam,
@@ -369,6 +416,68 @@ export const tools: ToolDefinition[] = [
       required: ['edits'],
       additionalProperties: false,
       $defs: DEFS,
+    },
+  },
+  {
+    name: 'start_revision',
+    description:
+      'Start an in-work issue of a RELEASED data module (issueInfo/@inWork "00") so that it can be changed by the S1000D rules. The result is a NEW document: issueNumber unchanged, inWork "01", issueType as given; the released issue is never changed. The change markup of the previous issue is removed (changeType / changeMark / reasonForUpdateRefIds, changeInline tags with their text kept, every reasonForUpdate) and elements marked changeType="delete" are removed; only those ranges of the original text are rewritten. issueType is REQUIRED and is the user\'s decision: "changed" (changes shown with change markup: then edit with edit_data_module marking), "revised" (reworked, no change markup), "status" (only the identification and status section), "new" only when starting from issue 001-00. Optional "reason" adds one reasonForUpdate to the in-work issue in the same call (with revised or status from issue 002 on, the default BREX requires one). Refused: a document already in work, a deleted issue, an id of a removed element that the rest still refers to. Not done: release (inWork back to "00", issueNumber + 1), issueDate, quality assurance. Returns started, xml (unless includeXml is false), previous, issueInfo, issueType, fileName, removed{}, reasonForUpdate, refusals[], newSchemaErrors[], referencedFromOtherObjects[], verification, fixes[]. With write: true the in-work issue is written under fileName beside "path" (or into the CSDB when xml was given); an existing file of that name is a write-conflict.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: pathParam,
+        xml: xmlParam,
+        csdbDirs: csdbDirsParam,
+        issueType: {
+          type: 'string',
+          enum: ['changed', 'revised', 'status', 'new'],
+          description:
+            'issueType of the in-work issue. Ask the user; it is never chosen for you. "new" is accepted only when starting from 001-00 (it follows Chap 3.9.5.1 Table 3 but the default BREX reports BREX-S1-00030).',
+        },
+        reason: {
+          ...reasonParam,
+          description:
+            'Optional: one reason for update to add to the in-work issue (same as add_reason_for_update). If it cannot be added, the in-work issue is not started either.',
+        },
+        product: productParam,
+        write: writeParam,
+        overwrite: overwriteParam,
+        allowInvalid: allowInvalidParam,
+        includeXml: {
+          type: 'boolean',
+          description:
+            'Include the XML in the response (default: true when write is false, false when write is true).',
+        },
+        maxFixes: maxFixesParam,
+      },
+      required: ['issueType'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'add_reason_for_update',
+    description:
+      'Add ONE reason for update (reasonForUpdate) to the status element of an IN-WORK data module, and nothing else: the content is not touched and no change markup is added. Use it for a change that has no change markup: an editorial change (updateReasonType urt01), or an issue whose issueType is revised or status. For a change that IS shown with change markup, do not use this tool: pass marking.reason to edit_data_module, which adds the reason and the markup together. A reason added here can be referred to by later marked edits through marking.reasonRefId (not a urt01 reason). The text and updateReasonType are the user\'s; nothing is filled in. Refused: a released issue (inWork "00": call start_revision first), an id already in the document. Returns added, xml (unless includeXml is false), reasonForUpdate {id, updateReasonType}, refusals[], newSchemaErrors[], verification, fixes[]. Writes only when write is true (a path is overwritten in place).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: pathParam,
+        xml: xmlParam,
+        csdbDirs: csdbDirsParam,
+        reason: reasonParam,
+        product: productParam,
+        write: writeParam,
+        overwrite: overwriteParam,
+        allowInvalid: allowInvalidParam,
+        includeXml: {
+          type: 'boolean',
+          description:
+            'Include the XML in the response (default: true when write is false, false when write is true).',
+        },
+        maxFixes: maxFixesParam,
+      },
+      required: ['reason'],
+      additionalProperties: false,
     },
   },
   {
