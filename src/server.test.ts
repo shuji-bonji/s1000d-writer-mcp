@@ -713,6 +713,10 @@ describe('start_revision / marking / add_reason_for_update', () => {
     const inWork = readFileSync(file, 'utf8');
     expect(inWork).toContain('<issueInfo issueNumber="001" inWork="01"/>');
     expect(inWork).toContain('<dmStatus issueType="changed">');
+    // 元の版を変えないことは、_notes に 1 度だけ書く（core の notes と重ねない）
+    expect(
+      started.data._notes.filter((n: string) => /issue is (never |not )changed/.test(n)),
+    ).toHaveLength(1);
 
     // 同じ名前があれば書かない
     const again = await call('start_revision', {
@@ -794,6 +798,10 @@ describe('start_revision / marking / add_reason_for_update', () => {
     expect(reason.data.written).toEqual([file]);
     expect(readFileSync(file, 'utf8')).toBe(reason.data.xml);
     expect(reason.data.xml.match(/<reasonForUpdate /g)).toHaveLength(2);
+    // 本文と変更の印を変えていないことは、_notes に 1 度だけ書く（core の notes と重ねない）
+    expect(
+      reason.data._notes.filter((n: string) => /change markup were not changed/.test(n)),
+    ).toHaveLength(1);
     // urt01 の理由は、印から指せない
     const editorial = await call('edit_data_module', {
       path: file,

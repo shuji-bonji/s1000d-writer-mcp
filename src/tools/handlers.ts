@@ -1066,7 +1066,8 @@ async function startRevisionTool(args: Args) {
     ...(outcome?.skipped ? { writeSkipped: outcome.skipped } : {}),
     _notes: [
       'An in-work issue was made from the released issue: inWork is "01", issueNumber is unchanged, issueType is the value given. The change markup and the reasons for update of the previous issue were removed (removed{}); elements marked changeType="delete" in the previous issue are gone. Only those ranges of the original text were rewritten.',
-      'The released issue is never changed: the in-work issue is a NEW file (fileName). Edit that file from now on (edit_data_module with marking, add_reason_for_update). Releasing it (inWork back to "00", issueNumber + 1, issueDate, quality assurance) is not done by this server.',
+      // 元の版を変えないことは、core の notes（下の started.notes）が書く。ここでは重ねて書かない
+      'Edit the in-work issue (fileName) from now on (edit_data_module with marking, add_reason_for_update). Releasing it (inWork back to "00", issueNumber + 1, issueDate, quality assurance) is not done by this server.',
       ...(added.length > 0
         ? [
             'newSchemaErrors[] lists XSD errors that the document did not have before (usually a parent left without a required child after an element marked changeType="delete" was removed). Such a result is never written.',
@@ -1194,7 +1195,8 @@ async function addReasonForUpdateTool(args: Args) {
     written: outcome?.written ? [outcome.written] : [],
     ...(outcome?.skipped ? { writeSkipped: outcome.skipped } : {}),
     _notes: [
-      'One reasonForUpdate was added to the status element. The content and change markup were not changed; every other character is as it was.',
+      // 本文・版の情報・変更の印を変えていないことは、core の notes（下の result.notes）が書く。ここでは重ねて書かない
+      'One reasonForUpdate was added to the status element; every other character is as it was.',
       ...result.notes.map(toolNames),
       ...fixNotes([], summary),
       ...(write
