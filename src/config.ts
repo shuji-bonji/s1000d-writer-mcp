@@ -4,6 +4,7 @@
  */
 import { createRequire } from 'node:module';
 import {
+  CORE_INFO,
   resolveStackConfig,
   specDirHowTo,
   type ResolvedStackConfig,
@@ -15,6 +16,13 @@ const packageJson = require('../package.json') as { name: string; version: strin
 export const PACKAGE_INFO = {
   name: packageJson.name,
   version: packageJson.version,
+} as const;
+
+/** 応答の `_server`。答えたサーバーの名前と版、実際に読み込んだ core の版（D-38） */
+export const SERVER_INFO = {
+  name: PACKAGE_INFO.name,
+  version: PACKAGE_INFO.version,
+  core: CORE_INFO.version,
 } as const;
 
 /** 環境変数の名前（無ければ設定ファイルの specDir / csdbDirs を読む） */

@@ -9,7 +9,7 @@ import {
   SegmentsError,
   SkeletonMismatchError,
 } from '@shuji-bonji/s1000d-core';
-import { ENV, PACKAGE_INFO } from './config.js';
+import { ENV, PACKAGE_INFO, SERVER_INFO } from './config.js';
 import { tools } from './tools/definitions.js';
 import { toolHandlers } from './tools/handlers.js';
 
@@ -23,7 +23,7 @@ import { toolHandlers } from './tools/handlers.js';
  * 4. 「verification が valid」を S1000D 準拠と読まれること。準拠は判定しない。
  * 5. 翻訳や訳の採点までするように読まれること。文を出し入れするだけ。
  */
-const INSTRUCTIONS = `This server WRITES S1000D data modules without letting you write XML. You give a structured draft (titles, paragraphs, steps, tables, figures, references as a tree); the server numbers it (DMC, ICN, PMC, BREX reference), builds the XML, verifies it (XSD, BREX, references) and offers fixes. Every response carries "verification" (VerificationStatus) and ends with "_notes".
+const INSTRUCTIONS = `This server WRITES S1000D data modules without letting you write XML. You give a structured draft (titles, paragraphs, steps, tables, figures, references as a tree); the server numbers it (DMC, ICN, PMC, BREX reference), builds the XML, verifies it (XSD, BREX, references) and offers fixes. Every response carries "verification" (VerificationStatus) and "_notes", and ends with "_server".
 
 It does NOT do the following:
 - It does not accept XML that you wrote. build_data_module and convert_manual take a structured draft or a manual (JSON). apply_fixes, edit_data_module, start_revision, add_reason_for_update, extract_segments and apply_segments take an EXISTING document (path or xml), never one you composed. Do not make up DMCs, ICNs, the BREX reference or enumeration values: leave them to the allocation rules.
@@ -41,7 +41,9 @@ The server keeps no state. The numbering ledger (sourceId → DMC, assetId → I
 
 A draft the server cannot build comes back as {"error": {"code": "input-error", "path": "/body[2]/children[1]", "detail": "..."}} (not as a tool failure): fix that spot and call again. Other expected stops are "skeleton-mismatch" (the data module changed since extract_segments) and "write-conflict".
 
-Costs: convert_manual builds and verifies every data module (about 0.1 s each with BREX); use topics to convert a part. Use includeXml: false to keep responses small.`;
+Costs: convert_manual builds and verifies every data module (about 0.1 s each with BREX); use topics to convert a part. Use includeXml: false to keep responses small.
+
+Every response ends with "_server": {"name", "version", "core"}: the package name and version of the server that answered, and the version of @shuji-bonji/s1000d-core it has loaded. They describe the running process, not what is installed on disk. If they differ from the versions you expect (for example, a version published after the host was started), the host is still running an older process and must be restarted.`;
 
 /** 呼び出し側が直せる、想定内の失敗。isError にせず、構造化して返す */
 function expectedError(error: unknown): Record<string, unknown> | undefined {
@@ -65,6 +67,18 @@ function expectedError(error: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+/**
+ * 応答の本文を JSON の文字列にする。最後の項目に、答えたサーバーの名前と版、読み込んだ core の版を足す（D-38）。
+ * 成功・想定内の失敗・想定外の失敗のすべての応答がここを通る。
+ */
+function responseText(body: unknown): string {
+  const obj =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : { result: body };
+  return JSON.stringify({ ...obj, _server: SERVER_INFO }, null, 2);
+}
+
 export function buildServer(): McpServer {
   const server = new McpServer(
     { name: PACKAGE_INFO.name, version: PACKAGE_INFO.version },
@@ -82,7 +96,7 @@ export function buildServer(): McpServer {
       async (args) => {
         try {
           const result = await handler(args as Record<string, unknown>);
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: 'text' as const, text: responseText(result) }] };
         } catch (error) {
           const expected = expectedError(error);
           if (expected) {
@@ -90,18 +104,14 @@ export function buildServer(): McpServer {
               content: [
                 {
                   type: 'text' as const,
-                  text: JSON.stringify(
-                    { error: expected, _notes: ['Nothing was written.'] },
-                    null,
-                    2,
-                  ),
+                  text: responseText({ error: expected, _notes: ['Nothing was written.'] }),
                 },
               ],
             };
           }
           const message = error instanceof Error ? error.message : String(error);
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: message }, null, 2) }],
+            content: [{ type: 'text' as const, text: responseText({ error: message }) }],
             isError: true,
           };
         }
