@@ -138,7 +138,16 @@ export async function verifyWithFixes(
     s.brex.state !== 'violations' &&
     s.references.state !== 'unresolved' &&
     !(applic && applic.findings.length > 0);
-  if (clean) return { result, fixes: [], specificationReferences: 0, applicability };
+  // 仕様書への dmRef だけが見つからないときも、core 0.16.0 からは references.state が resolved になる。
+  // その件数は検証状態の specificationReferences にあるので、候補を作らずにそこから取る
+  if (clean) {
+    return {
+      result,
+      fixes: [],
+      specificationReferences: s.references.specificationReferences ?? 0,
+      applicability,
+    };
+  }
 
   const all = suggestFixes(result, { xml, csdb: pc.csdb, brexLayers, applicability: applic });
   return {

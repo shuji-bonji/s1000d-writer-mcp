@@ -235,6 +235,33 @@ describe('build_data_module', () => {
     expect(r.data.fixCount).toBe(0);
   });
 
+  it('仕様書への dmRef だけが見つからないときは resolved で、件数は omitted と verification の両方に出る', async () => {
+    useSpec(SPEC);
+    const r = await call('build_data_module', {
+      draft: draft({
+        body: [
+          {
+            kind: 'para',
+            text: '書き方は仕様書による。',
+            refs: [{ kind: 'dmRef', target: 'S1000D-A-00-60-0000-00B-024B-D' }],
+          },
+        ],
+      }),
+      allocation: allocation(),
+      csdbDirs: [LAX],
+    });
+    expect(r.data.verification.references).toMatchObject({
+      state: 'resolved',
+      unresolvedCount: 0,
+      specificationReferences: 1,
+    });
+    expect(r.data.fixCount).toBe(0);
+    expect(r.data.omitted.specificationReferences).toBe(1);
+    expect(r.data._notes.join(' ')).toContain(
+      '1 dmRef(s) to the S1000D specification itself are not listed',
+    );
+  });
+
   it('exact の修正だけを自動で適用し（appliedFixes）、再検証する。several は fixes[] に残す', async () => {
     useSpec(SPEC);
     // 責任企業 K0001 は BREX KB-00001（K0002 だけ）に違反 → exact の置き換え。情報コード 041 は KB-00002 に違反 → several

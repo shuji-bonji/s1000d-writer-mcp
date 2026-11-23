@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 (2026-11-24)
+
+依存の `@shuji-bonji/s1000d-core` を `^0.16.0` に上げました。core 0.16.0 は、検証状態の参照の数から、仕様書（モデル識別コード `S1000D`）への `dmRef` を除きます。
+
+### 変更（応答が変わります）
+
+- **`verification.references` は、仕様書への `dmRef` を未解決に数えません。** `build_data_module`・`convert_manual`・`apply_fixes` などが返す `verification.references.unresolvedCount` と `state` は、仕様書への参照を除いて決まり、その件数は `specificationReferences` に出ます。未解決が仕様書への参照だけの DM は `state` が `resolved` になります。`convert_manual` の `totals.unresolvedReferenceCount` も同じ数え方です。
+
+### 修正
+
+- 未解決が仕様書への参照だけの DM は「直すものが無い」と判定されるため、そのままでは `omitted.specificationReferences` が 0 になり、`_notes` の注記も消えるところでした。その場合も、検証状態の `verification.references.specificationReferences` から件数を取り、これまでどおり返します。
+
 ## 0.6.1 (2026-11-24)
 
 `start_revision` と `add_reason_for_update` の `_notes` で、同じ内容の文が 2 つ並ばないようにしました。応答のほかの項目と、動きは変わりません。
