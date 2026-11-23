@@ -514,7 +514,7 @@ async function convertManualTool(args: Args) {
       : []),
     ...(conv.notRepresented.length > 0
       ? [
-          'notRepresented lists what the draft format cannot express; those parts of the manual are not in the data modules.',
+          'notRepresented lists what the draft format cannot express; those parts of the manual are not in the data modules. "where" holds the first 5 places only; "whereOmitted" is the number of places left out (count = where.length + whereOmitted).',
         ]
       : []),
     ...STANDARD_NOTES,

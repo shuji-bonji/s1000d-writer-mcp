@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 (2026-11-24)
+
+Grok Build の試用（2026-11-05）の所見のうち、未確認だった F-12 を直しました（hub の `eval/hosts/grok-build/reports/2026-11/FINDINGS.md`）。
+
+### 追加
+
+- **`convert_manual` の `notRepresented[]` の行に、`whereOmitted` を足しました。** `where` は最初の 5 件だけを持つので、6 件以上あると `count` と `where` の件数が合わず、応答からは理由が分かりませんでした。`where` に入らなかった場所の数を `whereOmitted` に返します（`count` は `where` の件数と `whereOmitted` の和）。5 件以下のときは付きません。`_notes` にも同じことを書きました。`count` と `where` は変わりません。
+
+### テスト
+
+- 自作のマニュアルで、同じ種類の「表せなかったもの」が 6 件あるとき、`where` が 5 件、`whereOmitted` が 1 になることを確かめるテストを足しました。
+
 ## 0.8.0 (2026-11-24)
 
 ### 追加

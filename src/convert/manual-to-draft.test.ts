@@ -213,6 +213,40 @@ describe('manualToDrafts: Step.next', () => {
   });
 });
 
+describe('manualToDrafts: notRepresented の where と whereOmitted', () => {
+  it('where は最初の 5 件で、入らなかった数を whereOmitted に返す（Grok Build の所見 F-12）', () => {
+    // 行き先の無い next を 6 つ持つ手順の Topic
+    const many: Manual = {
+      ...manual,
+      topics: [
+        {
+          id: 't-many',
+          kind: 'procedure',
+          title: '行き先の無い next が 6 つ',
+          steps: [1, 2, 3, 4, 5, 6].map((n) => ({
+            id: `m${n}`,
+            text: `操作 ${n}。`,
+            next: [{ to: `nowhere-${n}` }],
+          })),
+        },
+      ],
+    } as Manual;
+    const r = manualToDrafts(many, { allocation, securityClassification: '01' });
+    const row = r.notRepresented.find(
+      (n) => n.what === 'Step.next to an id that is not a step, a screen or a topic',
+    )!;
+    expect(row.count).toBe(6);
+    expect(row.where).toHaveLength(5);
+    expect(row.whereOmitted).toBe(1);
+  });
+  it('5 件以下のときは whereOmitted を付けない', () => {
+    for (const n of run().notRepresented) {
+      if (n.count <= 5) expect(n).not.toHaveProperty('whereOmitted');
+      else expect(n.whereOmitted).toBe(n.count - n.where.length);
+    }
+  });
+});
+
 describe('manualToDrafts: dmRef の題名（dmTitle の techName と infoName）', () => {
   /** 下書きの木から dmRef を集める */
   const dmRefs = (nodes: DraftNode[]): NonNullable<DraftNode['refs']> =>

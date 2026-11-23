@@ -123,6 +123,8 @@ export interface NotRepresented {
   count: number;
   /** 場所（最初の 5 件） */
   where: string[];
+  /** `where` に入らなかった場所の数（`count` − `where` の件数）。0 のときは付かない */
+  whereOmitted?: number;
 }
 
 export interface ConvertResult {
@@ -373,7 +375,12 @@ class Converter {
   }
 
   notRepresented(): NotRepresented[] {
-    return [...this.lost.entries()].map(([what, e]) => ({ what, count: e.count, where: e.where }));
+    return [...this.lost.entries()].map(([what, e]) => ({
+      what,
+      count: e.count,
+      where: e.where,
+      ...(e.count > e.where.length ? { whereOmitted: e.count - e.where.length } : {}),
+    }));
   }
 
   // ---- 採番 ----
